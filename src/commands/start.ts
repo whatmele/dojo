@@ -35,8 +35,9 @@ export function registerStartCommand(program: Command): void {
         distributeCommands(root, session.id, config.agents);
         await generateContext(root, session, config);
       } else {
+        distributeCommands(root, null, config.agents);
         writeText(path.join(root, DOJO_DIR, 'context.md'), '');
-        log.dim('  当前没有活跃会话，context.md 已清空。');
+        log.dim('  当前没有活跃会话，已同步无会话版 commands，context.md 已清空。');
       }
 
       const targetTool = (tool ?? config.agents[0]) as AgentTool;

@@ -54,3 +54,24 @@ export function createSymlink(target: string, linkPath: string): void {
   }
   fs.symlinkSync(path.resolve(target), linkPath, 'dir');
 }
+
+/** 创建指向文件的软链；目标路径尽量用相对路径，便于工作区整体搬迁。 */
+export function createFileSymlink(targetFile: string, linkPath: string): void {
+  const absTarget = path.resolve(targetFile);
+  const absLink = path.resolve(linkPath);
+  ensureDir(path.dirname(absLink));
+  if (fs.existsSync(absLink)) {
+    const stat = fs.lstatSync(absLink);
+    if (stat.isSymbolicLink() || stat.isFile()) {
+      fs.unlinkSync(absLink);
+    } else {
+      fs.rmSync(absLink, { recursive: true });
+    }
+  }
+  let symlinkTarget = absTarget;
+  const rel = path.relative(path.dirname(absLink), absTarget);
+  if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+    symlinkTarget = rel.split(path.sep).join('/');
+  }
+  fs.symlinkSync(symlinkTarget, absLink, 'file');
+}

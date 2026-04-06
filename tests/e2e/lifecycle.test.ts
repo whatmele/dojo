@@ -139,10 +139,13 @@ describe('E2E lifecycle', () => {
     expect(prdCmd).not.toContain('${dojo_current_session_id}');
     expect(prdCmd).toContain('$ARGUMENTS');
 
-    // verify symlink
-    const claudeLink = path.join(workspaceRoot, '.claude', 'commands');
-    expect(fs.existsSync(claudeLink)).toBe(true);
-    expect(fs.lstatSync(claudeLink).isSymbolicLink()).toBe(true);
+    // verify per-file symlinks under .claude/commands (not whole-dir link)
+    const claudeCmdDir = path.join(workspaceRoot, '.claude', 'commands');
+    expect(fs.existsSync(claudeCmdDir)).toBe(true);
+    expect(fs.lstatSync(claudeCmdDir).isSymbolicLink()).toBe(false);
+    const prdLink = path.join(claudeCmdDir, 'dojo-prd.md');
+    expect(fs.lstatSync(prdLink).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(prdLink, 'utf-8')).toContain('user-auth');
 
     // -- Step 5: simulate AI work (write artifacts) --
     writeText(

@@ -28,9 +28,10 @@ export function registerContextCommand(program: Command): void {
         await generateContext(root, session, config);
         log.success('上下文和 commands 已刷新。');
       } else {
-        log.step('当前没有活跃会话，清空 context.md...');
+        log.step('当前没有活跃会话，刷新无会话版 commands 并清空 context.md...');
+        distributeCommands(root, null, config.agents);
         writeText(path.join(root, DOJO_DIR, 'context.md'), '');
-        log.success('context.md 已清空。');
+        log.success('commands 已刷新，context.md 已清空。');
       }
     });
 }

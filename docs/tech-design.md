@@ -216,25 +216,24 @@ export async function generateContext(
 ### 4.6 command-distributor.ts — Command 分发
 
 ```typescript
-// 职责：模板占位符替换 + 软链接管理
+// 职责：模板占位符替换 + 按文件的软链接
 
-export async function distributeCommands(
+export function distributeCommands(
   workspaceRoot: string,
-  sessionId: string,
-  agents: AgentTool[]
-): Promise<void>;
+  sessionId: string | null,
+  agents: AgentTool[],
+): void;
 
 // 内部步骤：
 // 1. 读取 .dojo/commands/*.md
-// 2. 替换 ${dojo_current_session_id} → sessionId
-// 3. 写入 .agents/commands/*.md
-// 4. 为兼容的 agent 创建软链接（.claude/commands/ → .agents/commands/）
+// 2. 替换 ${dojo_current_session_id}（无会话时：可选模板走空串 + 条件块；会话型模板加提示并替换为占位）
+// 3. 处理 <!-- DOJO_SESSION_ONLY --> / <!-- DOJO_NO_SESSION_ONLY --> 条件块
+// 4. 写入 .agents/commands/*.md
+// 5. 对 claude-code / trae：在 .claude/commands、.trae/commands 下仅为 dojo-*.md 创建指向 .agents/commands 同名文件的软链（非整目录链接）；旧版整目录软链在首次分发时迁移
 
-export function getSymlinkTargets(agents: AgentTool[]): string[];
-// claude-code → .claude/commands
-// codex → 不需要（.agents/commands 本身就是 codex 格式）
-// trae → .trae/commands
-// cursor → 暂不支持
+export function applyCommandSessionPlaceholders(content: string, sessionId: string | null): string;
+
+// codex / cursor → 直接使用 .agents/commands，无额外软链
 ```
 
 ## 五、CLI 命令实现
@@ -257,6 +256,7 @@ export function getSymlinkTargets(agents: AgentTool[]): string[];
   7. 创建 docs/ 目录
   8. 创建 repos/ 目录
   9. git init + 首次 commit
+  10. distributeCommands(root, null, agents) — 生成无会话版 .agents/commands 并同步文件级软链
 ```
 
 ### 5.2 dojo repo add <git-url>
@@ -326,8 +326,8 @@ export function getSymlinkTargets(agents: AgentTool[]): string[];
 
 流程：
   1. 读取 active session
-  2. 无 active session → 清空 context.md 和 AGENTS.md 动态段，刷新 commands（无 session ID 替换）
-  3. 有 active session → 调用 context-generator + command-distributor
+  2. 无 active session → distributeCommands(root, null)、清空 context.md（AGENTS.md 动态段若实现则一并处理）
+  3. 有 active session → distributeCommands(root, sessionId) + context-generator
 ```
 
 ### 5.8 dojo start [tool]
@@ -336,10 +336,9 @@ export function getSymlinkTargets(agents: AgentTool[]): string[];
 输入：tool name（可选，默认取 config.agents[0]）
 
 流程：
-  1. 检查 active session，无则报错退出
-  2. 执行 context reload
-  3. 确定启动命令（claude-code → "claude", codex → "codex"）
-  4. spawn 子进程启动 AI 工具
+  1. 有 active session → distributeCommands(sessionId) + generateContext；无则 distributeCommands(null) 并清空 context.md
+  2. 确定启动命令（claude-code → "claude", codex → "codex" 等）
+  3. spawn 子进程启动 AI 工具
 ```
 
 ## 六、模块依赖关系
@@ -403,7 +402,7 @@ start ──→ state, workspace, context-generator, command-distributor
 | 替换占位符 | ${dojo_current_session_id} 被替换为实际 ID |
 | $ARGUMENTS 不被替换 | 保持原样 |
 | 生成到 .agents/commands/ | 文件存在且内容正确 |
-| 软链接创建 | .claude/commands 是指向 .agents/commands 的 symlink |
+| 软链接创建 | `.claude/commands/dojo-*.md` 等为指向 `.agents/commands` 同名文件的文件级 symlink；`.claude/commands` 本身为真实目录 |
 | 更新时覆盖旧文件 | 重复执行不报错，内容为最新 |
 
 ### 7.4 集成测试用例
