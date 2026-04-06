@@ -71,20 +71,20 @@ export function buildContextMarkdown(
   const tasks = scanTasks(tasksDir, manifest);
 
   const lines: string[] = [];
-  lines.push('# 工作区上下文');
+  lines.push('# Workspace context');
   lines.push('');
-  lines.push(`目前这个工作区正在进行 **${session.description}** 的开发`);
+  lines.push(`This workspace is working on: **${session.description}**`);
   lines.push('');
 
-  lines.push('## 当前会话');
+  lines.push('## Current session');
   lines.push(`- Session ID: ${session.id}`);
-  lines.push(`- 状态: ${session.status}`);
+  lines.push(`- Status: ${session.status}`);
   if (session.external_link) {
-    lines.push(`- 关联链接: ${session.external_link}`);
+    lines.push(`- Link: ${session.external_link}`);
   }
   lines.push('');
 
-  lines.push('## 文件索引');
+  lines.push('## File index');
   lines.push('');
 
   if (prdFiles.length > 0) {
@@ -96,7 +96,7 @@ export function buildContextMarkdown(
   }
 
   if (researchFiles.length > 0) {
-    lines.push('### 调研');
+    lines.push('### Research');
     for (const f of researchFiles) {
       lines.push(`- .dojo/sessions/${session.id}/research/${f}`);
     }
@@ -104,7 +104,7 @@ export function buildContextMarkdown(
   }
 
   if (techFiles.length > 0) {
-    lines.push('### 技术方案');
+    lines.push('### Technical design');
     for (const f of techFiles) {
       lines.push(`- .dojo/sessions/${session.id}/tech-design/${f}`);
     }
@@ -112,15 +112,15 @@ export function buildContextMarkdown(
   }
 
   if (tasks.length > 0) {
-    lines.push('### 任务列表');
+    lines.push('### Tasks');
     lines.push('');
-    lines.push('任务按执行顺序排列：');
+    lines.push('Suggested order:');
     lines.push('');
-    lines.push('| # | 任务 | 说明 | 依赖 | 状态 |');
-    lines.push('|---|------|------|------|------|');
+    lines.push('| # | Task | Description | Depends on | Status |');
+    lines.push('|---|------|-------------|------------|--------|');
     for (let i = 0; i < tasks.length; i++) {
       const t = tasks[i];
-      const status = t.is_completed ? '✅ 已完成' : '⬜ 未完成';
+      const status = t.is_completed ? 'Done' : 'Todo';
       const deps = t.depends_on.length > 0 ? t.depends_on.join(', ') : '-';
       const desc = t.description || '-';
       lines.push(`| ${i + 1} | ${t.name} | ${desc} | ${deps} | ${status} |`);
@@ -130,9 +130,9 @@ export function buildContextMarkdown(
 
   const branchEntries = Object.entries(session.repo_branches);
   if (branchEntries.length > 0) {
-    lines.push('## 参与仓库');
-    lines.push('| 仓库 | 类型 | 分支 |');
-    lines.push('|------|------|------|');
+    lines.push('## Repositories');
+    lines.push('| Repo | Type | Branch |');
+    lines.push('|------|------|--------|');
     for (const [repoName, branch] of branchEntries) {
       const repo = config.repos.find(r => r.name === repoName);
       const type = repo?.type ?? 'unknown';

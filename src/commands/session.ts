@@ -23,13 +23,13 @@ async function suspendCurrentSession(root: string): Promise<void> {
   const allTasksDone = await checkAllTasksDone(root, current.id);
   if (allTasksDone && current.status === 'active') {
     const markComplete = await confirm({
-      message: `当前会话 "${current.id}" 的所有任务已完成，是否标记为 completed？`,
+      message: `All tasks in session "${current.id}" are done. Mark it completed?`,
       default: true,
     });
     if (markComplete) {
       current.status = 'completed';
       writeSessionState(root, current.id, current);
-      log.success(`会话 "${current.id}" 已标记为 completed。`);
+      log.success(`Session "${current.id}" marked completed.`);
       return;
     }
   }
@@ -37,7 +37,7 @@ async function suspendCurrentSession(root: string): Promise<void> {
   if (current.status === 'active') {
     current.status = 'suspended';
     writeSessionState(root, current.id, current);
-    log.step(`会话 "${current.id}" 已挂起。`);
+    log.step(`Session "${current.id}" suspended.`);
   }
 }
 
@@ -61,12 +61,12 @@ async function warnIfDirty(root: string): Promise<boolean> {
   const { clean, dirtyRepos } = await checkWorkspaceClean(root, session, config);
 
   if (!clean) {
-    log.warn('以下仓库有未提交的变更:');
+    log.warn('Uncommitted changes in:');
     for (const r of dirtyRepos) {
       log.warn(`  - ${r}`);
     }
     const proceed = await confirm({
-      message: '是否继续？',
+      message: 'Continue anyway?',
       default: false,
     });
     return proceed;
@@ -77,12 +77,12 @@ async function warnIfDirty(root: string): Promise<boolean> {
 export function registerSessionCommand(program: Command): void {
   const session = program
     .command('session')
-    .description('开发会话管理');
+    .description('Development session management');
 
   session
     .command('new')
-    .description('新建开发会话')
-    .option('--force', '跳过工作区干净检查')
+    .description('Create a new dev session')
+    .option('--force', 'Skip clean-workspace check')
     .action(async (opts: { force?: boolean }) => {
       const root = findWorkspaceRoot();
       const config = readConfig(root);
@@ -98,17 +98,17 @@ export function registerSessionCommand(program: Command): void {
       await suspendCurrentSession(root);
 
       const id = await input({
-        message: '会话 ID (kebab-case):',
-        validate: (v: string) => /^[a-z0-9]+(-[a-z0-9]+)*$/.test(v) || '请使用 kebab-case 格式',
+        message: 'Session ID (kebab-case):',
+        validate: (v: string) => /^[a-z0-9]+(-[a-z0-9]+)*$/.test(v) || 'Use kebab-case',
       });
 
       if (sessionExists(root, id)) {
-        log.error(`会话 "${id}" 已存在。使用 dojo session resume ${id} 恢复。`);
+        log.error(`Session "${id}" already exists. Run: dojo session resume ${id}`);
         process.exit(1);
       }
 
-      const description = await input({ message: '会话描述:' });
-      const externalLink = await input({ message: '关联链接 (可选):' });
+      const description = await input({ message: 'Session description:' });
+      const externalLink = await input({ message: 'External link (optional):' });
 
       const repoChoices = config.repos.map(r => ({
         name: `${r.name} (${r.type})`,
@@ -118,60 +118,60 @@ export function registerSessionCommand(program: Command): void {
       let selectedRepos: string[] = [];
       if (repoChoices.length > 0) {
         selectedRepos = await checkbox({
-          message: '选择参与仓库:',
+          message: 'Repositories in this session:',
           choices: repoChoices,
         });
       }
 
       const branchPattern = await input({
-        message: '新分支名:',
+        message: 'New branch name:',
         default: `feature/${id}`,
       });
 
-      // 选择基础分支：从工作区仓库的分支列表中选择
+      // Pick base branch from this repo's branch list
       let baseBranch = 'main';
       try {
         const { current, all } = await listBranches(root);
         if (all.length > 1) {
           baseBranch = await select({
-            message: '从哪个分支创建？',
+            message: 'Create from which branch?',
             choices: all.map(b => ({
-              name: b === current ? `${b} (当前)` : b,
+              name: b === current ? `${b} (current)` : b,
               value: b,
             })),
             default: current,
           });
         } else {
           baseBranch = current;
-          log.dim(`  基础分支: ${baseBranch}`);
+          log.dim(`  Base branch: ${baseBranch}`);
         }
       } catch {
-        log.dim(`  基础分支: ${baseBranch} (默认)`);
+        log.dim(`  Base branch: ${baseBranch} (default)`);
       }
 
-      log.step('创建分支...');
+      log.step('Creating branches...');
       const repoBranches: Record<string, string> = {};
       try {
         await createBranchFrom(root, branchPattern, baseBranch);
-        log.success(`workspace: 分支 ${branchPattern} 已创建 (基于 ${baseBranch})`);
+        log.success(`workspace: created branch ${branchPattern} from ${baseBranch}`);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        log.error(`workspace: 创建分支失败 — ${msg}`);
+        log.error(`workspace: failed to create branch — ${msg}`);
         process.exit(1);
       }
       for (const repoName of selectedRepos) {
         const repo = config.repos.find(r => r.name === repoName)!;
         const repoPath = path.join(root, repo.path);
         try {
-          // 业务仓库默认从其 default_branch 创建，如果该分支存在的话
+          // Other repos: default to default_branch when it exists
           const repoBase = repo.default_branch ?? baseBranch;
           await createBranchFrom(repoPath, branchPattern, repoBase);
           repoBranches[repoName] = branchPattern;
-          log.success(`${repoName}: 分支 ${branchPattern} 已创建 (基于 ${repoBase})`);
+          log.success(`${repoName}: created branch ${branchPattern} from ${repoBase}`);
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e);
-          log.error(`${repoName}: 创建分支失败 — ${msg}`);
-          log.error('停止创建后续仓库的分支。请修复问题后重试。');
+          log.error(`${repoName}: failed to create branch — ${msg}`);
+          log.error('Stopped creating branches for remaining repos. Fix and retry.');
           process.exit(1);
         }
       }
@@ -182,13 +182,13 @@ export function registerSessionCommand(program: Command): void {
         const repoPath = path.join(root, repo.path);
         try {
           await pushBranch(repoPath, branchPattern);
-          log.success(`${repoName}: 分支已推送`);
+          log.success(`${repoName}: branch pushed`);
         } catch {
-          log.warn(`${repoName}: 推送分支失败（可能没有远端），继续...`);
+          log.warn(`${repoName}: push failed (no remote?), continuing...`);
         }
       }
 
-      log.step('初始化会话目录...');
+      log.step('Initializing session directories...');
       const sessionDir = getSessionDir(root, id);
       ensureDir(path.join(sessionDir, 'product-requirements'));
       ensureDir(path.join(sessionDir, 'research'));
@@ -207,27 +207,27 @@ export function registerSessionCommand(program: Command): void {
       writeSessionState(root, id, sessionState);
       writeWorkspaceState(root, { active_session: id });
 
-      log.step('刷新 commands 和 context...');
+      log.step('Refreshing command stubs and context...');
       distributeCommands(root, id, config.agents);
       await generateContext(root, sessionState, config);
 
-      log.success(`会话 "${id}" 已创建并激活！`);
-      log.info('运行 dojo start 启动 AI 工具开始工作。');
+      log.success(`Session "${id}" created and active.`);
+      log.info('Run dojo start to launch your AI tool.');
     });
 
   session
     .command('resume <session-id>')
-    .description('恢复已有会话')
-    .option('--force', '跳过工作区干净检查')
+    .description('Resume an existing session')
+    .option('--force', 'Skip clean-workspace check')
     .action(async (sessionId: string, opts: { force?: boolean }) => {
       const root = findWorkspaceRoot();
       const config = readConfig(root);
 
       if (!sessionExists(root, sessionId)) {
-        log.error(`会话 "${sessionId}" 不存在。`);
+        log.error(`Session "${sessionId}" does not exist.`);
         const sessions = listSessions(root);
         if (sessions.length > 0) {
-          log.info('可用的会话:');
+          log.info('Available sessions:');
           for (const s of sessions) {
             log.info(`  ${s.id} [${s.status}] — ${s.description}`);
           }
@@ -244,29 +244,29 @@ export function registerSessionCommand(program: Command): void {
 
       const targetSession = readSessionState(root, sessionId);
 
-      log.step('切换仓库分支...');
+      log.step('Checking out branches...');
       if (targetSession.workspace_branch) {
         try {
           await checkoutBranch(root, targetSession.workspace_branch);
-          log.success(`workspace: 切换到 ${targetSession.workspace_branch}`);
+          log.success(`workspace: checked out ${targetSession.workspace_branch}`);
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e);
-          log.error(`workspace: 切换分支失败 — ${msg}`);
+          log.error(`workspace: checkout failed — ${msg}`);
         }
       }
       for (const [repoName, branch] of Object.entries(targetSession.repo_branches)) {
         const repo = config.repos.find(r => r.name === repoName);
         if (!repo) {
-          log.warn(`仓库 "${repoName}" 已不在工作区配置中，跳过。`);
+          log.warn(`Repository "${repoName}" no longer in config, skipping.`);
           continue;
         }
         const repoPath = path.join(root, repo.path);
         try {
           await checkoutBranch(repoPath, branch);
-          log.success(`${repoName}: 切换到 ${branch}`);
+          log.success(`${repoName}: checked out ${branch}`);
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e);
-          log.error(`${repoName}: 切换分支失败 — ${msg}`);
+          log.error(`${repoName}: checkout failed — ${msg}`);
         }
       }
 
@@ -274,10 +274,10 @@ export function registerSessionCommand(program: Command): void {
       writeSessionState(root, sessionId, targetSession);
       writeWorkspaceState(root, { active_session: sessionId });
 
-      log.step('刷新 commands 和 context...');
+      log.step('Refreshing command stubs and context...');
       distributeCommands(root, sessionId, config.agents);
       await generateContext(root, targetSession, config);
 
-      log.success(`会话 "${sessionId}" 已恢复并激活！`);
+      log.success(`Session "${sessionId}" resumed and active.`);
     });
 }

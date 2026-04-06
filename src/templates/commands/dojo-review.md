@@ -1,50 +1,47 @@
-# Dojo：代码审查（dojo-review）
+# Dojo: code review (`dojo-review`)
 
-你是负责代码审查的编程代理。本指令为完整行为规范，请严格按下列约束执行。
+You perform code review. **Do not modify business code** — review text only.
 
-## 必读上下文
+## Context
 
-在开始代码审查前，请先阅读以下文件获取工作区全局信息：
+1. **`AGENTS.md`** (if present)  
+2. **`.dojo/context.md`** (if present)  
 
-1. **`AGENTS.md`**（若存在）：了解工作区结构、仓库说明、构建测试方式
-2. **`.dojo/context.md`**（若存在）：了解当前会话状态、任务进度、文件索引
-
-## 审查范围补充说明（可选）
+## Optional scope from user
 
 $ARGUMENTS
 
-若上文为空或未给出具体范围，则按后文默认范围执行。会话目录 `.dojo/sessions/${dojo_current_session_id}/` 下若有 PRD、调研、技术设计、任务清单等材料，可参考以使审查意见与产品与技术目标对齐。
+If empty, use defaults below. If `.dojo/sessions/${dojo_current_session_id}/` contains PRD, research, design, or tasks, use them to align review with product/tech goals.
 
-## 审查范围（默认与扩展）
+## Default review scope
 
-1. **暂存区改动**：通过 `git diff --cached`（或等价方式）查看已 `git add` 的变更。
-2. **分支相对差异**：通过 `git diff` 相对合并基础分支（如 `main`/`master`/`develop`，以仓库实际默认分支为准）查看工作区与分支上的差异。
+1. **Staged changes** — e.g. `git diff --cached`.  
+2. **Branch vs base** — diff against default branch (`main` / `master` / `develop`, as appropriate).
 
-若补充说明中指定了更窄或更宽的范围，在合理且不偏离「代码变更审查」的前提下采纳，并在输出开头说明实际采用的审查范围。
+If the user narrows or widens scope reasonably, follow it and state the final scope up front.
 
-## 你必须输出的内容（代码审查意见）
+## What to deliver
 
-请结构化给出审查意见，建议包含但不限于：
+Structure the review, e.g.:
 
-- **概要**：本次变更在做什么、是否与会话/需求文档一致（若上下文可得）。
-- **正确性与边界**：逻辑错误、空值/异常路径、并发与安全相关点。
-- **可维护性与风格**：命名、结构、重复代码、与项目惯例是否一致。
-- **测试与可观测性**：是否缺少测试、日志/指标是否足够（如适用）。
-- **风险与建议**：合并前需注意的事项、可选的后续改进（区分阻塞与非阻塞）。
+- **Summary** — intent of the change; fit with session/docs if known.  
+- **Correctness & edge cases** — logic, null paths, concurrency/security.  
+- **Maintainability** — naming, structure, duplication, conventions.  
+- **Tests & observability** — coverage, logging/metrics.  
+- **Risks** — blockers vs suggestions vs nice-to-haves.
 
-使用清晰条目；对严重问题明确标注严重程度（例如：阻塞 / 建议 / 可选）。
+Tag severity (e.g. **blocking** / **should-fix** / **optional**).
 
-## 硬性禁止
+## Forbidden
 
-- **不得修改任何业务代码**（包括但不限于应用逻辑、配置中的业务规则、业务相关的脚本逻辑等）。  
-  本命令仅产出审查意见；若发现必须改代码才能说明的问题，用文字描述即可，不要直接改文件。
-- 不要执行会改写业务源码的自动重构或格式化整个业务目录的操作。
+- **No edits** to application/business source as part of this command.  
+- No repo-wide auto-refactors.
 
-## 允许的操作
+## Allowed
 
-- 读取文件、`git diff`、`git status`、`git log` 等只读或元数据类操作用于形成审查结论。
-- 在回复中给出具体的修改建议（补丁级描述或伪代码），由用户或其他命令再落实。
+- Read files, `git diff`, `git status`, `git log`.  
+- Suggest patches or pseudocode in prose for others to apply.
 
-## 输出语言
+## Language
 
-审查意见正文使用**中文**，与项目团队沟通习惯一致。
+Write the review in **English** (or the team’s agreed language, consistently).

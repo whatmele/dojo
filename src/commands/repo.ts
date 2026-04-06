@@ -26,12 +26,12 @@ function repoPathForConfig(root: string, absRepoPath: string): string {
 export function registerRepoCommand(program: Command): void {
   const repo = program
     .command('repo')
-    .description('仓库管理');
+    .description('Repository management');
 
   repo
     .command('add <source>')
-    .description('添加仓库到工作区（克隆 Git URL，或使用 --local 注册本地路径）')
-    .option('--local', '将 source 视为本地目录路径（不克隆）')
+    .description('Add a repo (clone Git URL, or use --local for an existing path)')
+    .option('--local', 'Treat source as a local directory path (no clone)')
     .action(async (source: string, opts: { local?: boolean }) => {
       const root = findWorkspaceRoot();
       const config = readConfig(root);
@@ -40,8 +40,8 @@ export function registerRepoCommand(program: Command): void {
         let parsedName = parseRepoName(source);
         if (parsedName === 'unknown-repo') {
           parsedName = await input({
-            message: '无法从 URL 解析仓库名，请输入名称:',
-            validate: (v: string) => (v.trim().length > 0 ? true : '名称不能为空'),
+            message: 'Could not parse repo name from URL; enter a name:',
+            validate: (v: string) => (v.trim().length > 0 ? true : 'Name cannot be empty'),
           });
           parsedName = parsedName.trim();
         }
@@ -49,30 +49,30 @@ export function registerRepoCommand(program: Command): void {
 
         const existing = config.repos.find(r => r.name === name);
         if (existing) {
-          log.error(`仓库 "${name}" 已存在于工作区。`);
+          log.error(`Repository "${name}" is already in this workspace.`);
           process.exit(1);
         }
 
         const type = await select({
-          message: `仓库类型 (${name}):`,
+          message: `Repository type (${name}):`,
           choices: [
-            { name: 'biz — 业务仓库', value: 'biz' as RepoType },
-            { name: 'dev — 开发工具仓库', value: 'dev' as RepoType },
-            { name: 'wiki — 知识库仓库', value: 'wiki' as RepoType },
+            { name: 'biz — product / services', value: 'biz' as RepoType },
+            { name: 'dev — tooling', value: 'dev' as RepoType },
+            { name: 'wiki — knowledge / reference', value: 'wiki' as RepoType },
           ],
         });
 
-        const description = await input({ message: '仓库描述:' });
+        const description = await input({ message: 'Repository description:' });
 
         const repoPath = `repos/${type}/${name}`;
         const fullPath = path.join(root, repoPath);
 
-        log.step(`克隆仓库到 ${repoPath}...`);
+        log.step(`Cloning into ${repoPath}...`);
         try {
           await cloneRepo(source, fullPath);
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e);
-          log.error(`克隆失败: ${msg}`);
+          log.error(`Clone failed: ${msg}`);
           process.exit(1);
         }
 
@@ -81,7 +81,7 @@ export function registerRepoCommand(program: Command): void {
           defaultBranch = await getCurrentBranch(fullPath);
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e);
-          log.error(`无法检测默认分支: ${msg}`);
+          log.error(`Could not detect default branch: ${msg}`);
           process.exit(1);
         }
 
@@ -95,7 +95,7 @@ export function registerRepoCommand(program: Command): void {
         };
 
         addRepo(root, repoConfig);
-        log.success(`仓库 "${name}" 已添加到工作区。`);
+        log.success(`Repository "${name}" added to the workspace.`);
         return;
       }
 
@@ -104,11 +104,11 @@ export function registerRepoCommand(program: Command): void {
         : path.resolve(root, source);
 
       if (!fileExists(fullPath)) {
-        log.error(`路径不存在: ${fullPath}`);
+        log.error(`Path does not exist: ${fullPath}`);
         process.exit(1);
       }
       if (!fileExists(path.join(fullPath, '.git'))) {
-        log.error(`不是 Git 仓库（缺少 .git）: ${fullPath}`);
+        log.error(`Not a Git repository (no .git): ${fullPath}`);
         process.exit(1);
       }
 
@@ -118,7 +118,7 @@ export function registerRepoCommand(program: Command): void {
 
       const existingLocal = config.repos.find(r => r.name === name);
       if (existingLocal) {
-        log.error(`仓库 "${name}" 已存在于工作区。`);
+        log.error(`Repository "${name}" is already in this workspace.`);
         process.exit(1);
       }
 
@@ -127,20 +127,20 @@ export function registerRepoCommand(program: Command): void {
         defaultBranch = await getCurrentBranch(fullPath);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        log.error(`无法读取当前分支: ${msg}`);
+        log.error(`Could not read current branch: ${msg}`);
         process.exit(1);
       }
 
       const type = await select({
-        message: `仓库类型 (${name}):`,
+        message: `Repository type (${name}):`,
         choices: [
-          { name: 'biz — 业务仓库', value: 'biz' as RepoType },
-          { name: 'dev — 开发工具仓库', value: 'dev' as RepoType },
-          { name: 'wiki — 知识库仓库', value: 'wiki' as RepoType },
+          { name: 'biz — product / services', value: 'biz' as RepoType },
+          { name: 'dev — tooling', value: 'dev' as RepoType },
+          { name: 'wiki — knowledge / reference', value: 'wiki' as RepoType },
         ],
       });
 
-      const description = await input({ message: '仓库描述:' });
+      const description = await input({ message: 'Repository description:' });
 
       const repoConfig: RepoConfig = {
         name,
@@ -152,19 +152,19 @@ export function registerRepoCommand(program: Command): void {
       };
 
       addRepo(root, repoConfig);
-      log.success(`仓库 "${name}" 已添加到工作区。`);
+      log.success(`Repository "${name}" added to the workspace.`);
     });
 
   repo
     .command('remove <name>')
-    .description('从工作区移除仓库')
+    .description('Remove a repository from the workspace')
     .action(async (name: string) => {
       const root = findWorkspaceRoot();
       const config = readConfig(root);
       const repoConfig = config.repos.find(r => r.name === name);
 
       if (!repoConfig) {
-        log.error(`仓库 "${name}" 不在工作区中。`);
+        log.error(`Repository "${name}" is not in this workspace.`);
         process.exit(1);
       }
 
@@ -173,7 +173,7 @@ export function registerRepoCommand(program: Command): void {
       }
 
       const shouldDelete = await confirm({
-        message: `是否同时删除本地目录 ${repoConfig.path}？`,
+        message: `Also delete local directory ${repoConfig.path}?`,
         default: false,
       });
 
@@ -183,16 +183,16 @@ export function registerRepoCommand(program: Command): void {
         const fullPath = path.join(root, repoConfig.path);
         if (fs.existsSync(fullPath)) {
           fs.rmSync(fullPath, { recursive: true });
-          log.step(`已删除 ${repoConfig.path}`);
+          log.step(`Deleted ${repoConfig.path}`);
         }
       }
 
-      log.success(`仓库 "${name}" 已从工作区移除。`);
+      log.success(`Repository "${name}" removed from the workspace.`);
     });
 
   repo
     .command('sync [repo-name]')
-    .description('同步仓库代码')
+    .description('Pull latest for one or all repositories')
     .action(async (repoName?: string) => {
       const root = findWorkspaceRoot();
       const config = readConfig(root);
@@ -202,19 +202,19 @@ export function registerRepoCommand(program: Command): void {
         : config.repos;
 
       if (repos.length === 0) {
-        log.warn(repoName ? `仓库 "${repoName}" 未找到。` : '工作区中没有仓库。');
+        log.warn(repoName ? `Repository "${repoName}" not found.` : 'No repositories in this workspace.');
         return;
       }
 
       for (const repo of repos) {
         const repoPath = path.join(root, repo.path);
         if (!fs.existsSync(repoPath)) {
-          log.warn(`${repo.name}: 本地目录不存在，跳过`);
+          log.warn(`${repo.name}: local path missing, skipping`);
           continue;
         }
 
         const branch = await getCurrentBranch(repoPath);
-        log.step(`${repo.name} (${branch}): 拉取中...`);
+        log.step(`${repo.name} (${branch}): pulling...`);
         const result = await pullCurrent(repoPath);
         if (result.success) {
           log.success(`${repo.name}: ${result.summary}`);

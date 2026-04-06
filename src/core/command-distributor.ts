@@ -52,7 +52,7 @@ export function applyCommandSessionPlaceholders(content: string, sessionId: stri
 
 function noSessionBannerForSessionBoundCommands(): string {
   return (
-    '> **Dojo**：当前无活跃会话。请先执行 `dojo session new`；下方出现的 `no-active-session` 仅为占位路径，**不要**当作真实会话目录使用。\n\n'
+    '> **Dojo**: No active session. Run `dojo session new` first. The segment `no-active-session` in paths is a **placeholder only** — do not treat it as a real session id.\n\n'
   );
 }
 

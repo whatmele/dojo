@@ -1,90 +1,82 @@
-你是一个工作区初始化助手。你的任务是扫描当前工作区各仓库，更新**入口索引**并把**详细说明**落到 `docs/`，而不是把长文全部塞进 `AGENTS.md`。
+You scan all repos in the workspace and refresh a **short index** in `AGENTS.md` while putting **detailed notes under `docs/`** — do not move the full scan into `AGENTS.md` alone.
 
-## 必读上下文
+## Read first
 
-在开始扫描前，请先阅读：
+1. **`AGENTS.md`** — current entry shape  
+2. **`.dojo/config.json`** — workspace name, description, repo paths/types  
 
-1. **`AGENTS.md`**（若存在）：当前入口长什么样，便于增量更新或收敛篇幅
-2. **`.dojo/config.json`**（若存在）：工作区名称、描述与各仓库路径、类型、描述
+**Do not** treat **`.dojo/context.md`** as mandatory input for this command: it is session-maintained and may be stale. Prefer config + repo facts.
 
-**请勿**将 **`.dojo/context.md`** 作为本命令的前置必读材料：该文件由会话流程维护，易过期；本命令以配置与仓库实况为准。
+## Roles
 
-## 背景
+- **`AGENTS.md`** — **overview index**: name, one-line description, short repo table, list of Dojo slash commands, **links into `docs/`**, how to read `.dojo/context.md` (session-specific notes below).  
+- **`docs/`** — **detailed** scan: stacks, build/test commands, modules, cross-repo dependencies. e.g. `docs/workspace-overview.md` or `docs/repos/<name>.md`.
 
-- **`AGENTS.md`**：给 AI 的**总览索引**——工作区叫什么、有哪些仓库（各一两句话）、常用 Dojo 命令列表、**指向 `docs/` 里详细文档的链接**、如何阅读 `.dojo/context.md`（见下方会话相关说明）。
-- **`docs/`**：**探索仓库、模块说明、构建与测试命令、架构与设计类长文**的归宿。扫描结果的主体应写在这里（例如 `docs/workspace-overview.md`，或按仓库拆成 `docs/repos/<name>.md`）。
+## Steps
 
-## 你需要做的事
+### 1. Config
 
-### 1. 读取工作区配置
+Read `.dojo/config.json` for workspace metadata and repos.
 
-阅读 `.dojo/config.json`，获取工作区名称、描述与各仓库信息。
+### 2. Scan each repo
 
-### 2. 扫描每个仓库
+Under `repos/`: README, top-level layout, stack, build/test (package.json, Makefile, …), main modules (key paths only).
 
-对 `repos/` 下每个仓库：README、顶层结构、技术栈、构建/测试命令（package.json、Makefile 等）、核心模块（只记关键路径，不必逐文件）。
+### 3. Write `docs/` (detail)
 
-### 3. 写入 `docs/`（详细）
+Include per-repo paths, types, stacks, commands (copy-pasteable blocks), and relationships. One file or many — stay consistent.
 
-将扫描得到的**详细**内容写入 `docs/`，至少包含：
+### 4. Update root `AGENTS.md` (keep short)
 
-- 各仓库的路径、类型、技术栈、核心目录说明
-- 各仓库的安装 / 构建 / 测试 / 运行命令（可复制粘贴的代码块）
-- 仓库之间的依赖或协作关系（若有）
-
-可使用 `docs/workspace-overview.md` 单文件长文，或拆分多文件；在文中自洽即可。
-
-### 4. 更新根目录 `AGENTS.md`（总览，保持短小）
-
-`AGENTS.md` **只保留索引级内容**，建议结构如下（可适当增删，但不要恢复成长篇扫描报告）：
+Suggested shape (adapt as needed; **do not** turn this back into a long report):
 
 ```markdown
-# {工作区名称}
+# {Workspace name}
 
-> {工作区描述，一两句}
+> {One–two line description}
 
-## 仓库一览
+## Repos (summary)
 
-| 仓库 | 类型 | 路径 | 说明 |
-|------|------|------|------|
-| … | … | … | 各一行 |
+| Repo | Type | Path | Notes |
+|------|------|------|-------|
+| … | … | … | one line each |
 
-## 详细文档
+## Detailed docs
 
-- 工作区与仓库详情见：**[docs/workspace-overview.md](./docs/workspace-overview.md)**（若你使用了其他文件名，此处改为实际路径）
+- Overview: **[docs/workspace-overview.md](./docs/workspace-overview.md)** (adjust if you used another path)
 
-## 常用 Dojo 命令
+## Dojo slash commands
 
-- `dojo-think-and-clarify` — 澄清需求前先向用户提问
-- `dojo-prd` — 梳理需求，输出 PRD 文档
-- `dojo-research` — 项目调研，输出调研报告
-- `dojo-tech-design` — 技术方案设计
-- `dojo-task-decompose` — 任务拆解为原子任务
-- `dojo-dev-loop` — 开发测试循环
-- `dojo-review` — 代码 Review
-- `dojo-commit` — 生成 commit 并提交
-- `dojo-gen-doc` — 生成/更新文档
-- `dojo-init-context` — 重新扫描仓库并更新本索引与 docs
+- `dojo-think-and-clarify` — clarify before building
+- `dojo-prd` — requirements
+- `dojo-research` — research
+- `dojo-tech-design` — technical design
+- `dojo-task-decompose` — task breakdown
+- `dojo-dev-loop` — dev/test loop
+- `dojo-review` — code review
+- `dojo-commit` — commit
+- `dojo-gen-doc` — documentation
+- `dojo-init-context` — refresh this index and docs
 
-## 当前状态
+## Current status
 
-（根据工作区是否已有**活跃会话**二选一撰写，勿两段并存：有会话则引导阅读 `.dojo/context.md`；无会话则说明可先执行 `dojo session new`，勿捏造会话状态。）
+(Choose **one** branch only: if there is an **active session**, point readers to `.dojo/context.md`; if **not**, say there is no active session and suggest `dojo session new`. Do not invent session state.)
 ```
 
 <!-- DOJO_SESSION_ONLY -->
-执行本命令时：在最终写入的 `AGENTS.md` 里，「当前状态」小节应引导阅读 `@.dojo/context.md`（与上方示例括号中的「有会话」分支一致）。
+When running with an active session: in the final `AGENTS.md`, the **Current status** section should point readers to `@.dojo/context.md`.
 <!-- /DOJO_SESSION_ONLY -->
 
 <!-- DOJO_NO_SESSION_ONLY -->
-执行本命令时：在最终写入的 `AGENTS.md` 里，「当前状态」小节应明确当前无活跃会话，可提示用户执行 `dojo session new`（与上方示例括号中的「无会话」分支一致）。
+When there is **no** active session: in the final `AGENTS.md`, **Current status** should state that and suggest `dojo session new`; do not pretend a session exists.
 <!-- /DOJO_NO_SESSION_ONLY -->
 
-## 用户补充说明（可选）
+## Optional user notes
 
 $ARGUMENTS
 
-## 约束
+## Rules
 
-- **禁止**把本应在 `docs/` 的长篇扫描结果只写在 `AGENTS.md` 里；`AGENTS.md` 必须短、可扫读。
-- 不修改任何业务代码（应用与业务测试代码等）。
-- 若 `docs/` 下已有文档，可合并更新并在 `AGENTS.md` 的「详细文档」中列出链接。
+- **Forbidden**: put the full long scan only in `AGENTS.md`; `AGENTS.md` must stay skimmable.  
+- **No business code** changes.  
+- If `docs/` already has files, merge/update and link from `AGENTS.md`.

@@ -1,61 +1,61 @@
-# Dojo 命令：产品需求文档（PRD）生成
+# Dojo: PRD authoring (`dojo-prd`)
 
-你是负责协助用户撰写清晰、可执行的产品需求文档（PRD）的 AI 助手。本命令仅产出文档与元数据，**不得修改任何业务代码**（包括但不限于应用源码、配置中的业务逻辑、数据库迁移中的业务规则等）。
+You help produce a clear, actionable product requirements document (PRD). This command outputs **documentation only** — **do not modify application/business source code** (including app code, business logic in config, business rules in migrations, etc.).
 
-## 必读上下文
+## Required context
 
-在开始撰写 PRD 前，请先阅读以下文件获取工作区全局信息：
+Before writing the PRD, read:
 
-1. **`AGENTS.md`**（若存在）：了解工作区结构、仓库说明、构建测试方式
-2. **`.dojo/context.md`**（若存在）：了解当前会话状态、任务进度、文件索引
+1. **`AGENTS.md`** (if present): workspace layout, repos, build/test notes  
+2. **`.dojo/context.md`** (if present): session status, tasks, file index  
 
-## 用户需求
+## User input
 
 $ARGUMENTS
 
-上述需求描述可能不完整。你必须先完成校验，再进入撰写流程。
+The request may be incomplete. **Validate** before drafting.
 
-## 输出目录
+## Output location
 
-所有产出写入 `.dojo/sessions/${dojo_current_session_id}/product-requirements/`。
+Write all artifacts under:
 
-若目录不存在，应创建后再写入。仅在此路径（及其子路径）内新增或更新与 PRD 相关的 Markdown/索引文件；**不要**在其他位置改动业务代码。
+`.dojo/sessions/${dojo_current_session_id}/product-requirements/`
 
-## 第一步：目标清晰度校验（必须通过）
+Create the folder if needed. Only add or update PRD-related Markdown under this tree; **do not** touch business code elsewhere.
 
-在撰写 PRD 前，你必须判断上述需求是否包含**明确的产品/项目目标**。至少应能回答：
+## Step 1 — Goal clarity (required)
 
-1. **要解决什么问题或抓住什么机会？**（问题陈述或价值主张是否清楚）
-2. **期望的结果是什么？**（成功时用户或业务方能看到什么变化，是否可描述）
-3. **主要受众/用户是谁？**（若完全无法推断，则视为不清晰）
+Before drafting, confirm the request answers at least:
 
-若以上任一项无法从上述需求中合理推断，**不要**猜测后强行写 PRD。请用简洁中文向用户列出缺失点，并给出 2～4 个具体问题请用户补充；待用户澄清后再继续（若当前回合无法多轮对话，则输出「待澄清清单」作为 `product-requirements/` 下的独立文件，例如 `待澄清.md`，并说明需用户回复后再生成正式 PRD）。
+1. **What problem or opportunity?**  
+2. **What does success look like?**  
+3. **Who is the primary audience?**
 
-仅当目标已足够清晰时，进入第二步。
+If any item cannot be reasonably inferred, **do not guess**. Reply with missing points and **2–4 concrete questions**. If you cannot multi-turn, write a `clarifications-needed.md` (or similar) under `product-requirements/` and stop until the user fills gaps.
 
-## 第二步：撰写 PRD
+Proceed to Step 2 only when goals are clear enough.
 
-在通过校验后，在 `product-requirements/` 下生成结构化的 PRD 文档，建议主文件名为 `PRD.md`（可根据需要增加附录或拆分文件，如 `用户故事.md`、`范围与非目标.md`）。
+## Step 2 — Write the PRD
 
-PRD 建议包含（可按实际情况增删，但逻辑要完整）：
+After validation, add structured PRD Markdown under `product-requirements/` (e.g. `PRD.md`, plus appendices if useful). Suggested sections:
 
-- 背景与目标
-- 用户与场景
-- 功能范围与非目标
-- 用户旅程或关键用例
-- 功能需求（可验收的描述）
-- 非功能需求（性能、安全、合规等，若适用）
-- 假设、依赖与风险
-- 里程碑或优先级建议（若用户未指定，可给出合理缺省）
+- Background & goals  
+- Users & scenarios  
+- Scope & non-goals  
+- Journeys / key use cases  
+- Functional requirements (testable)  
+- Non-functional requirements (performance, security, compliance) if relevant  
+- Assumptions, dependencies, risks  
+- Milestones / priorities if not specified  
 
-使用清晰的中文，避免模糊用词；需求应可被后续设计与开发直接引用。
+Use clear **English** (or the team’s agreed doc language consistently). Avoid vague wording.
 
-## 硬性约束
+## Hard rules
 
-1. **禁止修改业务代码**：不要编辑、创建或删除业务仓库中的源代码目录下的实现文件（除非用户明确要求且超出本命令范围——本命令下一律禁止）。
-2. **仅写入会话目录下的 PRD 相关产出**：路径限定为 `.dojo/sessions/${dojo_current_session_id}/product-requirements/`。
-3. **先校验目标，后写文档**：目标不清晰时必须先澄清或输出待澄清清单。
+1. **No business code changes** in product repos unless the user explicitly asks outside this command.  
+2. **Only** write under `.dojo/sessions/${dojo_current_session_id}/product-requirements/`.  
+3. **Validate goals first**, then document.
 
-## 完成时
+## When done
 
-简要说明已写入的文件路径列表，并提醒用户可在同一会话内迭代补充需求说明以更新 PRD（更新时仍遵守「不碰业务代码」与输出目录约定）。
+List files written and remind the user they can iterate in the same session (still no business code, same output root).

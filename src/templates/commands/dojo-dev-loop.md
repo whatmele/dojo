@@ -1,81 +1,61 @@
-# Dojo：开发测试闭环（dojo-dev-loop）
+# Dojo: dev/test loop (`dojo-dev-loop`)
 
-你是执行「写测试 → 开发 → 测试 → 修复」闭环的编程代理。本指令为完整行为规范，请严格按下列步骤与约束执行。
+You run a **test → implement → test → fix** loop. **You may change business code** for this command.
 
-## 必读上下文
+## Context
 
-在开始执行开发闭环前，请先阅读以下文件获取工作区全局信息：
+1. **`AGENTS.md`** (if present)  
+2. **`.dojo/context.md`** (if present)  
 
-1. **`AGENTS.md`**（若存在）：了解工作区结构、仓库说明、构建测试方式
-2. **`.dojo/context.md`**（若存在）：了解当前会话状态、任务进度、文件索引
-
-## 用户说明
+## User input
 
 $ARGUMENTS
 
-若存在会话目录 `.dojo/sessions/${dojo_current_session_id}/`，请读取其中的 PRD、调研（research）、技术设计（tech-design）、任务清单（tasks）等材料并作为上下文参考。
+If `.dojo/sessions/${dojo_current_session_id}/` exists, read PRD, `research/`, `tech-design/`, `tasks/` as background.
 
-## 任务清单与 manifest 调度
+## Task selection via `manifest.json`
 
-当用户说明中**未**明确给出单一任务目录或任务名时，应按下列规则决定「接下来做哪一个任务」：
+When the user **does not** name a single task explicitly:
 
-1. **读取 manifest**  
-   若存在文件 **`.dojo/sessions/${dojo_current_session_id}/tasks/manifest.json`**，必须先读取并解析其中的 `tasks` 数组。
+1. If **`.dojo/sessions/${dojo_current_session_id}/tasks/manifest.json`** exists, parse `tasks`.  
+2. For each task, read **`tasks/<name>/state.json`** if present; use `is_completed`.  
+3. In **array order**, pick the first task that is **not completed** and whose **`depends_on`** tasks are all completed.  
+4. **Do not** start a task until all dependencies are done.  
+5. If the user **names** a task dir/path explicitly, run **that** task (still warn if dependencies are incomplete).
 
-2. **结合完成状态**  
-   对每个任务项，读取对应目录 **`.dojo/sessions/${dojo_current_session_id}/tasks/<name>/state.json`**（若存在），根据其中的 `is_completed` 判断是否已完成。
+If there is no `manifest.json`, fall back to user text + session materials and explain why manifest was not used.
 
-3. **依赖与顺序**  
-   - 在 `manifest.json` 的 `tasks` **数组顺序**下，从左到右寻找第一个**未完成**且其 **`depends_on` 中列出的所有任务**均已完成的任务，作为当前应执行的任务。  
-   - **不得**在未完成全部 `depends_on` 所指任务前，开始执行依赖它们的任务。
+## Preconditions (do not code until satisfied)
 
-4. **用户显式指定任务**  
-   若用户说明中给出了**明确的任务目录名或路径**（或可唯一解析到某一 `tasks/<name>/`），则**直接执行该任务**，**不必**遵守 manifest 的默认顺序与依赖排队逻辑（仍建议在回复中提示未满足依赖时的风险）。
+You must be able to state briefly:
 
-若不存在 `manifest.json`，则沿用既有方式：根据用户说明与会话材料中的任务描述、或用户指定的任务目录自行判定，并在回复中说明未使用 manifest 的原因。
+1. **Implementation plan** — modules/files, boundaries.  
+2. **Test & acceptance plan** — scenarios, pass criteria.
 
-## 前置校验（未通过则不得开始实现）
+If either is unclear, **ask** before coding. **Do not** start implementation with a vague test plan.
 
-在开始编写或修改业务代码之前，你必须能够得出且书面化（可在回复中简要列出）：
+If requirements are infeasible or contradict the architecture, **stop** and explain.
 
-1. **清晰的任务实现计划**：要改哪些模块、接口或文件，边界与依赖是什么。
-2. **清晰的测试与验收计划**：测什么场景、成功标准是什么、如何判定通过（可自动化测试、手工步骤或两者结合）。
+## Loop
 
-若无法从用户说明与会话材料中得出上述两项，**先向用户说明缺口并追问或建议补充**；**不得在测试计划仍模糊时开始开发**。
+1. **Tests first** — add/adjust tests, fixtures, mocks; ensure commands/deps run locally.  
+2. **Implement** — change product code as planned.  
+3. **Run tests** — record results.  
+4. **On failure** — fix implementation or tests; repeat from step 3.  
+5. **On success** — confirm acceptance; summarize changes and test outcome.  
+6. **`state.json`** — if the task path is clear and `state.json` exists, set after success:
 
-若需求明显不合理、无法实现或与现有架构严重冲突，**停止执行并明确告知用户原因**，不要强行推进。
+```json
+{"is_completed": true}
+```
 
-## 执行流程（按顺序循环直至验收通过）
+If path unclear, explain why you did not update it.
 
-1. **① 编写测试代码并搭建/确认测试环境**  
-   根据测试与验收计划，补充或调整测试用例、夹具、mock 等，并确保本地可运行测试的命令与依赖就绪。
+## Stop conditions
 
-2. **② 开发功能**  
-   按实现计划修改或新增业务代码（**允许修改业务代码**）。
+- After **several** documented attempts (e.g. ≥3) without passing, **stop** and report steps, symptoms, hypotheses, and what needs a human decision.  
+- Do not weaken assertions just to pass unless the user agrees.
 
-3. **③ 运行测试**  
-   执行项目约定的测试命令（单测、集成测等），记录结果。
+## Final reply
 
-4. **④ 若失败**  
-   分析失败原因，调整实现或测试（保持与验收计划一致），回到步骤 ③ 重试。
-
-5. **⑤ 若通过**  
-   确认满足验收标准后，将本任务视为在技术上已完成；在回复中总结改动要点与测试结论。
-
-6. **⑥ 任务目录与 state.json**  
-   若用户说明中给出了**明确的任务目录路径**（或你可唯一解析到某个任务目录），且该目录下存在 `state.json`，则在验收通过后将其更新为：
-
-   ```json
-   {"is_completed": true}
-   ```
-
-   若不存在 `state.json` 或路径不明确，不要臆造路径；在回复中说明未更新的原因。
-
-## 失败与中止条件
-
-- 在**多次**（建议至少 3 轮有记录的尝试）仍无法使测试通过或无法满足验收标准时，**停止闭环**，向用户报告：已尝试的步骤、失败现象、可能根因与建议的下一步（需人工决策的部分明确标出）。
-- 不要为通过测试而删除或弱化本应存在的断言，除非用户明确同意降低标准。
-
-## 输出要求
-
-在最终回复中应包含：实现概要、测试如何覆盖验收点、最终测试结果，以及（如适用）`state.json` 是否已更新。
+Include: summary of implementation, how tests cover acceptance, final test result, and whether `state.json` was updated.

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 108" role="img" aria-label="Dojo">
+  <style>
+    .banner {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+    .sub {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 10px;
+      font-weight: 400;
+      fill: #8b949e;
+    }
+  </style>
+  <!-- Colors match src/utils/logger.ts chalk.bold.rgb per line -->
+  <text class="banner" xml:space="preserve">
+    <tspan x="0" y="12" fill="#ff8232">  ˆˆˆˆˆˆW  ˆˆˆˆˆˆW      ˆˆW ˆˆˆˆˆˆW </tspan>
+    <tspan x="0" dy="14" fill="#ff8c3c">  ˆˆTPPˆˆWˆˆTPPPˆˆW     ˆˆQˆˆTPPPˆˆW</tspan>
+    <tspan x="0" dy="14" fill="#ff9646">  ˆˆQ  ˆˆQˆˆQ   ˆˆQ     ˆˆQˆˆQ   ˆˆQ</tspan>
+    <tspan x="0" dy="14" fill="#ffa050">  ˆˆQ  ˆˆQˆˆQ   ˆˆQˆˆ   ˆˆQˆˆQ   ˆˆQ</tspan>
+    <tspan x="0" dy="14" fill="#ffaa5a">  ˆˆˆˆˆˆT]ZˆˆˆˆˆˆT]ZˆˆˆˆˆT]ZˆˆˆˆˆˆT]</tspan>
+    <tspan x="0" dy="14" fill="#ffb464">  ZPPPPP]  ZPPPPP]  ZPPPP]  ZPPPPP] </tspan>
+  </text>
+  <text class="sub" x="0" y="102">  Agent Workspace CLI</text>
+</svg>

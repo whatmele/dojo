@@ -1,22 +1,22 @@
-# Dojo：澄清思考（dojo-think-and-clarify）
+# Dojo: think and clarify (`dojo-think-and-clarify`)
 
-在动手写代码、改设计或执行复杂任务之前，先**理解用户真实需求**并**结合当前工作区上下文**做简短思考，然后向用户提出若干**高信号**的澄清问题。
+Before writing code, changing design, or executing a large task, **understand the request** and **project context**, then ask **high-signal** clarifying questions.
 
-## 必读上下文（按需）
+## Context (as needed)
 
-- **`AGENTS.md`**：工作区与仓库概况
-- **`.dojo/context.md`**（若存在）：当前会话与任务状态
-- 用户通过本命令传入的补充说明：`$ARGUMENTS`
+- **`AGENTS.md`** — workspace overview  
+- **`.dojo/context.md`** — session/task state if present  
+- User text passed to this command: `$ARGUMENTS`
 
-## 你要做的事
+## What to do
 
-1. **归纳理解**：用一两段话说明你理解的用户目标、已知的约束或风险（不要冗长）。
-2. **列出待澄清点**：提出 **3～7 个**具体问题（编号列表）。问题应能减少歧义、避免返工；避免泛泛而谈的「还有什么要求吗」。
-3. **不要**：在本步骤直接实现功能、直接提交大段代码或替用户做最终决策；若信息不足，以提问为主。
+1. **Summarize your understanding** in one or two short paragraphs (no essay).  
+2. **List 3–7 numbered questions** that reduce ambiguity and rework risk. Avoid generic “anything else?” prompts.  
+3. **Do not** implement features, dump large patches, or make final decisions for the user in this step — if information is missing, **prioritize questions**.
 
-## 输出格式
+## Output format
 
-- 第一部分：**我的理解**
-- 第二部分：**需要您确认的问题**（编号列表）
+- **My understanding**  
+- **Questions for you** (numbered list)
 
-使用**中文**。
+Use **English**.

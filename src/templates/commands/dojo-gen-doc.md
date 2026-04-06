@@ -1,48 +1,45 @@
-# Dojo：文档生成（dojo-gen-doc）
+# Dojo: documentation (`dojo-gen-doc`)
 
-你是负责生成或更新项目文档的编程代理。本指令为完整行为规范，请严格按下列约束执行。
+You generate or update **project documentation**. Follow this spec strictly.
 
-## 必读上下文
+## Context
 
-在生成或更新文档前，请先阅读以下文件获取工作区全局信息：
+1. **`AGENTS.md`** (if present)  
+2. **`.dojo/context.md`** (if present)  
 
-1. **`AGENTS.md`**（若存在）：了解工作区结构、仓库说明、构建测试方式
-2. **`.dojo/context.md`**（若存在）：了解当前会话状态、任务进度、文件索引
-
-## 用户说明
+## User input
 
 $ARGUMENTS
 
 <!-- DOJO_NO_SESSION_ONLY -->
-请根据上文说明需要生成或更新哪类文档（例如：README、API 说明、架构概览、部署指南、变更日志、用户手册等），以及侧重点或受众。若上文为空，则根据 **AGENTS.md** 与仓库实况推断最合理的文档产出，并在输出中说明推断依据。**当前无活跃会话**：请勿依赖 `.dojo/sessions/` 下的材料（若不存在或为空则忽略）。
+Use the notes above to decide what to write (README, API overview, architecture, runbooks, changelog, etc.). If empty, infer from **AGENTS.md** and visible repos and state your assumptions. **No active session**: do not rely on `.dojo/sessions/` (ignore if missing or empty).
 <!-- /DOJO_NO_SESSION_ONLY -->
 
 <!-- DOJO_SESSION_ONLY -->
-请根据上文说明需要生成或更新哪类文档（例如：README、API 说明、架构概览、部署指南、变更日志、用户手册等），以及侧重点或受众。若上文为空，则根据会话上下文推断最合理的文档产出，并在输出中说明你的推断依据。应充分利用 `.dojo/sessions/${dojo_current_session_id}/` 下的完整会话材料（PRD、调研、技术设计、任务、会议摘要等，若存在），使文档与当前会话目标一致。
+Use the notes above; if empty, infer from session context. Prefer materials under `.dojo/sessions/${dojo_current_session_id}/` (PRD, research, design, tasks, etc., when present) so docs match the session goal.
 <!-- /DOJO_SESSION_ONLY -->
 
-## 输出位置
+## Output location
 
-- 所有**新生成或本次任务中实质性更新**的文档文件，必须写入工作区根目录下的 **`./docs/`** 目录（若目录不存在则创建）。
-- 可在 `docs/` 下使用子目录分类（如 `docs/api/`、`docs/architecture/`），并在回复中列出新增或修改的文件路径。
-- 若用户明确要求更新**仓库根目录**的特定文件（如根目录 `README.md`），仅在用户说明中明确指定时方可写入 `docs/` 以外路径；否则默认仅操作 `./docs/`。
+- New or materially updated docs go under **`./docs/`** (create if needed).  
+- Subdirs like `docs/api/`, `docs/architecture/` are fine; list paths in your reply.  
+- Only write **outside** `docs/` if the user **explicitly** asked (e.g. root `README.md`).
 
-## 文档质量要求
+## Quality
 
-- 结构清晰：标题层级合理，必要时含目录、示例、常见问题。
-- 与代码及会话材料一致：避免编造不存在的接口或行为；不确定处标注「待确认」并建议核实方式。
-- 使用**中文**撰写正文（代码标识符、命令行可与原文一致）。
+- Clear headings; TOC if long.  
+- Match code and session facts; mark **TBD** when unsure and how to verify.  
+- Body text in **English** (identifiers/commands may stay as in repo).
 
-## 硬性禁止
+## Forbidden
 
-- **不得修改任何业务代码**（应用逻辑、业务配置实现、业务测试逻辑等）。  
-  本命令只产出或维护文档；不要为了「文档中的示例」去改实现，除非用户另行发起开发类命令。
+- **No business logic changes** — docs only; don’t “fix” code for examples unless another command is used.
 
-## 允许的操作
+## Allowed
 
-- 在 `./docs/` 下创建、编辑 Markdown 或其他项目约定的文档格式。
-- 读取业务代码与配置文件**仅用于准确描述行为**，只读不写业务代码。
+- Create/edit Markdown (or team-agreed formats) under `./docs/`.  
+- Read code/config **read-only** for accuracy.
 
-## 输出
+## Output
 
-用**中文**总结：生成了哪些文件、每份文档的用途、是否还有建议补充的章节（可选）。
+Summarize in **English**: files touched, purpose of each, optional follow-ups.

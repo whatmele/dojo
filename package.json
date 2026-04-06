@@ -1,7 +1,7 @@
 {
   "name": "dojo-cli",
   "version": "0.1.0",
-  "description": "Agent Workspace CLI：管理多仓库工作区、开发会话生命周期与 AI Agent 上下文",
+  "description": "Agent workspace CLI for managing multi-repo workspaces, dev session lifecycle, and AI agent context",
   "type": "module",
   "bin": {
     "dojo": "./dist/bin/dojo.js"

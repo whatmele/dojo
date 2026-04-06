@@ -1,116 +1,105 @@
-# Dojo 命令：任务拆解
+# Dojo: task breakdown (`dojo-task-decompose`)
 
-你是负责将技术设计拆解为可原子执行任务的 AI 助手。本命令仅在会话任务目录下创建结构化任务文件，**不得修改任何业务代码**。用户可能多次触发本命令以迭代任务列表，你应支持增量调整说明（仍以不修改业务代码为前提）。
+You decompose a technical design into atomic, executable tasks. **Only create files under the session `tasks/` tree — do not modify business code.** Users may re-run; support incremental updates without touching product source.
 
-## 必读上下文
+## Context
 
-在开始拆解任务前，请先阅读以下文件获取工作区全局信息：
+1. **`AGENTS.md`** (if present)  
+2. **`.dojo/context.md`** (if present)  
 
-1. **`AGENTS.md`**（若存在）：了解工作区结构、仓库说明、构建测试方式
-2. **`.dojo/context.md`**（若存在）：了解当前会话状态、任务进度、文件索引
-
-## 用户说明
+## User input
 
 $ARGUMENTS
 
-## 输出目录
+## Output root
 
-所有子任务目录必须位于 `.dojo/sessions/${dojo_current_session_id}/tasks/`。
+All task subfolders live under:
 
-若 `tasks/` 不存在，应创建。每个子任务使用**独立子目录**，目录名建议为有意义的英文短名或序号前缀（如 `01-auth-login`、`task-03-api`），同一轮拆解中保持命名风格一致。
+`.dojo/sessions/${dojo_current_session_id}/tasks/`
 
-## 可选会话上下文（拆解前应阅读）
+Create `tasks/` if needed. Each atomic task is its **own subdirectory** (e.g. `01-auth-login`, `task-03-api`). Keep naming consistent within one run.
 
-若存在，你应**尽量阅读**（只读）以下路径中的材料，用于对齐任务边界与验收标准：
+## Optional session inputs (read-only)
 
-- PRD：`.dojo/sessions/${dojo_current_session_id}/product-requirements/`
-- 调研：`.dojo/sessions/${dojo_current_session_id}/research/`
-- 技术设计：`.dojo/sessions/${dojo_current_session_id}/tech-design/`
+Read if present:
 
-若某项缺失，在总览或首个任务目录中的说明文件里注明依赖缺口，并决定是请求用户补充还是基于已有信息给出「待确认」任务。
+- PRD: `.../product-requirements/`  
+- Research: `.../research/`  
+- Design: `.../tech-design/`  
 
-## 第一步：前置条件校验（必须通过）
+If something is missing, note the gap in an overview or first task doc and either ask the user or mark items as “TBD”.
 
-在开始创建子任务目录与文件前，你必须确认：
+## Step 1 — Preconditions (required)
 
-1. **功能/范围足够清晰**：能说明「要做成什么」（可与用户说明及 PRD/设计对齐）。
-2. **技术设计可用**：存在可遵循的技术设计要点（通常来自 `tech-design/`）；若设计目录为空或明显不足以指导实现，你**不得**凭空编造大量与仓库无关的任务清单。
+Before creating folders:
 
-当上下文不足时：
+1. **Scope is clear enough** — what “done” means, aligned with user input + PRD/design.  
+2. **Design is usable** — normally under `tech-design/`; if empty or insufficient, **do not** invent a huge task list disconnected from the repo.
 
-- **先向用户列出需要补充的信息**；且
-- **结合仓库只读调查**：浏览与主题相关的目录、`AGENTS.md`、现有模块边界，记录「从代码可见的约束」写入任务说明，避免与设计冲突。
+If blocked:
 
-若仍无法在合理范围内拆解，在 `tasks/` 下写入 `待澄清.md`（或等价文件）说明缺口，并仅生成占位级任务或暂缓完整拆解。
+- Ask what’s missing, and  
+- Read-only scan relevant dirs + `AGENTS.md`, record visible constraints in task text.
 
-仅当「功能清晰 + 技术设计可执行」达到可接受程度时，再批量创建子任务目录。
+If still blocked, write `clarifications-needed.md` under `tasks/` and only add placeholder tasks if appropriate.
 
-## 第二步：任务目录内固定文件与 `tasks/` 根目录 `manifest.json`
+Proceed only when scope + design are workable.
 
-对每一个原子子任务，在 `tasks/<子任务目录>/` 下**必须**包含以下三个文件（第 1～3 项）。全部子任务规划就绪后，还须在 **`tasks/` 根目录** 产出第 4 项的 **`manifest.json`**。
+## Step 2 — Per-task files + `manifest.json`
 
-### 1. `task-implementation.md`
+For **each** atomic task, under `tasks/<task-name>/` you **must** create:
 
-使用中文编写，建议包含：
+### 1. `task-implementation.md` (English)
 
-- 任务目标（与设计中的哪一部分对应）
-- 前置依赖（依赖其他子任务、环境、配置）
-- 详细执行步骤（有序、可勾选或编号）
-- 涉及路径/模块提示（只读引用，**不要**在本命令中直接修改这些文件）
-- 风险与回滚注意（若适用）
+- Goal (maps to which part of design)  
+- Dependencies (other tasks, env, config)  
+- Step-by-step plan (ordered)  
+- Paths/modules (references only — **no edits here**)  
+- Risks / rollback if relevant  
 
-### 2. `task-acceptance.md`
+### 2. `task-acceptance.md` (English)
 
-使用中文编写，包含：
-
-- 验收标准（明确、可验证）
-- 测试或验证方式（手动步骤、单测/集成测建议等）
-- 完成定义（Definition of Done）
+- Acceptance criteria (verifiable)  
+- How to test (manual / automated hints)  
+- Definition of done  
 
 ### 3. `state.json`
 
-**必须**为合法 JSON，且**至少**包含：
+Valid JSON, **at least**:
 
 ```json
 {"is_completed": false}
 ```
 
-可根据需要扩展其他字段（如 `id`、`title`），但不得省略 `is_completed` 字段。
+### 4. `manifest.json` at `tasks/` root
 
-### 4. `manifest.json`（位于 `tasks/` 根目录）
-
-除各子任务目录外，必须在 **`tasks/` 目录根** 创建 **`manifest.json`**，用于声明任务执行顺序与依赖关系，供 `dojo-dev-loop` 等命令按序选取「下一个待完成任务」。
-
-**格式**（`tasks` 数组顺序即默认执行顺序的建议序列；`name` 与各子任务目录名一致）：
+Required. Declares order and dependencies for `dojo-dev-loop`.
 
 ```json
 {
   "tasks": [
-    { "name": "task-dir-name", "description": "任务简述", "depends_on": [] },
-    { "name": "another-task", "description": "另一个任务", "depends_on": ["task-dir-name"] }
+    { "name": "task-dir-name", "description": "Short label", "depends_on": [] },
+    { "name": "another-task", "description": "…", "depends_on": ["task-dir-name"] }
   ]
 }
 ```
 
-**排序与依赖约定**：
+**Ordering:** favor unit-level / single-module work **before** cross-module or E2E tasks.  
+**Dependencies:** list prerequisite task **directory names** in `depends_on` explicitly.
 
-- **顺序**：将**各模块的单元测试/单模块实现类任务**排在前面，**跨模块或端到端的集成测试类任务**排在后面；数组顺序应体现这一优先级。
-- **依赖**：在 `depends_on` 中**显式列出**前置任务目录名（`name`）；例如集成验收任务应依赖相关单模块任务，避免隐含顺序。
-- **与 dev-loop 的关系**：`dojo-dev-loop` 会优先依据本文件与各任务目录下的 `state.json` 判定下一步；清晰的顺序与 `depends_on` 即**执行序列与并行边界**的契约。
+Update `manifest.json` when the user iterates (add/remove/reorder tasks).
 
-用户多次迭代拆解时，应同步更新 `manifest.json`（增删任务、改依赖、调顺序），并与各目录内三文件及下方总览保持一致。
+## Step 3 — Overview (recommended)
 
-## 第三步：总览（建议）
+Add `README.md` under `tasks/` listing tasks, deps, recommended order — must stay consistent with `manifest.json`.
 
-在 `tasks/` 根目录建议增加 `README.md` 或 `任务总览.md`，列出所有子任务目录、依赖关系图（可用列表或 Mermaid）、推荐执行顺序；内容应与 **`manifest.json`** 一致或互为补充。用户多次迭代时，可更新该总览并说明与上一版的差异。
+## Hard rules
 
-## 硬性约束
+1. **No business code** under product `src/` etc.; only `.dojo/sessions/.../tasks/`.  
+2. **Every** task dir has the three files; **`manifest.json` at `tasks/` root** always matches the task set.  
+3. **Validate first**, then decompose.  
+4. Re-runs: merge or revise tasks and **update manifest + overview**.
 
-1. **禁止修改业务代码**：不在 `src/` 等业务源码树中实现功能；本命令只写 `.dojo/sessions/.../tasks/` 下的任务描述与 `state.json`。
-2. **每个子任务独立目录**，且三个文件齐全；**`tasks/` 根目录必须包含与当前任务集一致的 `manifest.json`**。
-3. **先校验再拆解**；信息不足时主动提问并结合仓库只读调查。
-4. 支持用户多次运行：若检测到已有任务目录，可根据用户说明判断是追加、替换还是修订某子任务，并在总览与 **`manifest.json`** 中记录（仍不修改业务代码）。
+## When done
 
-## 完成时
-
-列出所有新建或更新的子任务路径、**`manifest.json` 路径**，并简要说明推荐执行顺序（与 manifest 中顺序及 `depends_on` 一致）、待用户确认项（若有）。
+List new/updated paths, **`manifest.json`**, execution order, and open questions.

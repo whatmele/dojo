@@ -12,7 +12,7 @@ const program = new Command();
 
 program
   .name('dojo')
-  .description('Agent Workspace CLI — 管理多仓库工作区、开发会话与 AI Agent 上下文')
+  .description('Agent Workspace CLI — multi-repo workspaces, dev sessions, and AI context')
   .version('0.1.0')
   .hook('preAction', (thisCommand) => {
     if (thisCommand.args.length === 0 && thisCommand === program) {

@@ -1,51 +1,51 @@
-# Dojo 命令：项目调研
+# Dojo: research (`dojo-research`)
 
-你是负责为项目或主题进行结构化调研的 AI 助手。本命令产出调研记录与结论，**不得修改任何业务代码**。
+You produce structured research notes and conclusions. **Documentation only — do not modify business code.**
 
-## 输出目录
+## Output location
 
-所有产出写入 `.dojo/sessions/${dojo_current_session_id}/research/`。
+All output goes under:
 
-若目录不存在，应创建后再写入。仅在此路径内新增或更新调研相关文档；**不要**改动业务源码。
+`.dojo/sessions/${dojo_current_session_id}/research/`
 
-## 调研主题与说明
+Create the directory if missing. Only add research Markdown here.
+
+## Topic
 
 $ARGUMENTS
 
-## 必读上下文（执行调研前）
+## Context (before deep research)
 
-在开始深度调研前，你必须：
+1. Read **`AGENTS.md`** at the workspace root if it exists (structure, conventions, build/test).  
+2. Read **`.dojo/context.md`** if it exists; if missing, state that in the research doc and continue from visible repos.
 
-1. **阅读工作区根目录下的 `AGENTS.md`**（若存在）：提取与仓库结构、约定、模块边界、测试与构建方式相关的说明，并在调研中与之对齐。
-2. **阅读 `.dojo/context.md`**（若存在）：将其中的 Dojo/工作区上下文纳入调研背景；若文件不存在，在调研文档中注明「未找到 `.dojo/context.md`」，并基于仓库可见信息继续。
+If `AGENTS.md` is missing, note it and proceed from visible structure + the topic above.
 
-若 `AGENTS.md` 不存在，同样注明，并依赖可见目录结构与上文调研说明继续。
+## Step 1 — Goal & resources (required)
 
-## 第一步：调研目标与资源校验（必须通过）
+Confirm:
 
-在输出正式调研结论前，你必须确认上文调研说明满足：
+1. **Clear research goal** — what question or hypothesis.  
+2. **Clear resources** — repo paths, docs, modules, or external scope. If the user only gave a vague theme, list what you need (e.g. “which service directory?”) and **do not** assert broad conclusions about code you have not scoped.
 
-1. **清晰的调研目标**：要解决什么问题、回答什么问题、或验证什么假设（可一句话概括）。
-2. **明确的所需资源**：至少应说明或能推断出需要查看的**仓库路径**、文档链接、模块名称、或外部资料范围之一。若用户仅给出泛主题而未指定仓库内关注点，你必须列出需要用户补充的具体项（例如：「请指定相关包路径或服务目录」），**不要**在未约定范围时对业务代码做大范围武断结论。
+If unclear, ask short questions; if single-shot only, write `clarifications-needed.md` under `research/` and stop.
 
-若任一项不满足，用简洁中文向用户提问澄清；若无法多轮对话，则在 `research/` 下写入 `待澄清.md` 列出缺口，待补充后再产出完整调研。
+## Step 2 — Execute research
 
-## 第二步：执行调研
+After validation:
 
-在通过校验后：
+- Combine `AGENTS.md`, `.dojo/context.md`, and **read-only** repo files.  
+- Separate **facts** (evidence in repo/docs) from **inference** (label as inference).  
+- Mark uncertainty and how to verify when evidence is external or missing.
 
-- 结合 `AGENTS.md`、`.dojo/context.md` 与仓库内可读文件（只读），整理与调研目标相关的信息。
-- 区分**事实**（代码/文档中可查证）与**推断**（需明确标注为推断）。
-- 对外部知识或无法在当前仓库验证的内容，标注不确定性或建议的验证方式。
+Suggested main file: `research-report.md` (plus `references.md`, `open-questions.md` if helpful).
 
-建议在 `research/` 下使用主文件 `调研报告.md`，必要时可增加 `引用与路径.md`、`问题清单.md` 等。
+## Hard rules
 
-## 硬性约束
+1. **No business code edits.**  
+2. **Only** `.dojo/sessions/${dojo_current_session_id}/research/`.  
+3. **Validate goal & scope first.**
 
-1. **禁止修改业务代码**：不得编辑业务实现、业务配置中的逻辑等。
-2. **输出仅限会话调研目录**：`.dojo/sessions/${dojo_current_session_id}/research/`。
-3. **先校验目标与资源，再写结论**。
+## When done
 
-## 完成时
-
-列出已写入的文件路径，并说明调研范围与未覆盖部分（若有）。
+List paths written and summarize scope / gaps.

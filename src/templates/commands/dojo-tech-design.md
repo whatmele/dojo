@@ -1,77 +1,72 @@
-# Dojo 命令：技术方案设计
+# Dojo: technical design (`dojo-tech-design`)
 
-你是负责为功能撰写详细技术设计的 AI 助手。本命令仅产出设计文档（含 PlantUML），**不得修改任何业务代码**。
+You write a technical design (including PlantUML). **Documentation only — no business code changes.**
 
-## 必读上下文
+## Context
 
-在开始撰写技术设计前，请先阅读以下文件获取工作区全局信息：
+1. **`AGENTS.md`** (if present)  
+2. **`.dojo/context.md`** (if present)  
 
-1. **`AGENTS.md`**（若存在）：了解工作区结构、仓库说明、构建测试方式
-2. **`.dojo/context.md`**（若存在）：了解当前会话状态、任务进度、文件索引
-
-## 用户说明（需求来源）
+## User input
 
 $ARGUMENTS
 
-## 输出目录
+## Output location
 
-所有产出写入 `.dojo/sessions/${dojo_current_session_id}/tech-design/`。
+All artifacts under:
 
-若目录不存在，应创建后再写入。仅在此目录内新增或更新设计文档；**不要**改动业务实现代码。
+`.dojo/sessions/${dojo_current_session_id}/tech-design/`
 
-## 可选会话上下文（设计前应阅读）
+Create if missing. Only design docs here — **no implementation edits** in product repos.
 
-若存在，你应在设计前**尽量阅读**（只读）以下目录中的已有材料，并与上文用户说明对齐；若某目录为空或不存在，在 design 文档中注明「未使用该项上下文」即可：
+## Optional session inputs (read-only)
 
-- PRD：`.dojo/sessions/${dojo_current_session_id}/product-requirements/`
-- 调研：`.dojo/sessions/${dojo_current_session_id}/research/`
+If they exist, read before designing; if empty, note “not used” in the design:
 
-若用户说明中给出仓库内某 `.md` 文件路径或 URL，应将其作为需求来源之一解析（链接若不可访问，说明限制并基于可用信息继续或请求用户粘贴要点）。
+- PRD: `.dojo/sessions/${dojo_current_session_id}/product-requirements/`  
+- Research: `.dojo/sessions/${dojo_current_session_id}/research/`  
 
-## 第一步：可实现范围校验（必须通过）
+If the user points to a path or URL, use it; if unreachable, say so and continue or ask for paste.
 
-在开始撰写技术设计前，你必须能够**明确判定**本次要实现的功能边界（做什么、不做什么）。若无法从用户说明与上述会话上下文中确定：
+## Step 1 — Scope check (required)
 
-- 用简洁中文列出歧义点并向用户提问；或
-- 若无法多轮对话，在 `tech-design/` 下写入 `待澄清.md`，说明需补充的信息后再生成完整设计。
+You must know **what is in/out of scope** for this feature. If unclear from input + session artifacts:
 
-**禁止**在完全不清楚「要实现哪些功能」的情况下编造笼统设计并冒充完整方案。
+- Ask short clarifying questions, **or**  
+- Write `clarifications-needed.md` under `tech-design/` if single-shot only.
 
-## 第二步：撰写技术设计文档
+**Do not** invent a vague design when requirements are unknown.
 
-通过校验后，在 `tech-design/` 下生成主设计文档，建议文件名为 `技术设计.md`（可按需拆分附件）。
+## Step 2 — Design document
 
-### 必须包含的内容
+After validation, add the main design (e.g. `technical-design.md`) under `tech-design/`.
 
-1. **模块交互流程**  
-   说明模块/服务/层之间的调用与数据流向，使用 **PlantUML**（例如 `sequence` 或 `activity` 图）表达关键路径。
+### Required content
 
-2. **数据协议**  
-   说明接口契约、消息格式、存储模型或事件载荷等（视功能而定）；与协议相关的结构建议用 **PlantUML**（如 `class` 图表达 DTO/实体关系，或辅以表格说明字段）。
+1. **Module interaction** — call/data flow; use **PlantUML** (`sequence` or `activity`) for key paths.  
+2. **Data contracts** — APIs, messages, storage, events; use **PlantUML** `class`/tables as fits.  
+3. **Types & interfaces** — responsibilities; **PlantUML** `class`/`interface` diagrams.
 
-3. **类/接口设计**  
-   给出主要类型、接口、职责划分；使用 **PlantUML** `class` 或 `interface` 图展示核心抽象及其关系（可分层多张图）。
+### PlantUML
 
-### PlantUML 要求
+- Embed in Markdown fenced blocks with language `plantuml`.  
+- Keep diagrams readable; split if large.
 
-- 文档中以 Markdown 代码块形式嵌入 PlantUML，语言标记使用 `plantuml`。
-- 图表应可读、与正文一致；避免过度庞大，可按场景拆分为多张图。
+### Optional sections
 
-### 其他建议章节（按需）
+- Goals vs PRD  
+- Tech choices & tradeoffs  
+- Errors, security, performance, observability  
+- Testing, rollout, migration  
 
-- 背景与目标对齐（与 PRD 要点对应）
-- 技术选型与权衡
-- 错误处理、安全、性能、可观测性
-- 测试策略与迁移/发布注意点
+Use clear **English** throughout.
 
-全文使用清晰中文。
+## Hard rules
 
-## 硬性约束
+1. **No business code** changes to satisfy this design in this command.  
+2. **Only** `.dojo/sessions/${dojo_current_session_id}/tech-design/`.  
+3. **Scope confirmed** + **three diagram categories** above included.
 
-1. **禁止修改业务代码**：不创建、不修改业务源码以实现本设计；本命令只写设计文档。
-2. **输出仅限** `.dojo/sessions/${dojo_current_session_id}/tech-design/`。
-3. **必须先确认功能边界**，且设计正文**必须包含**上述三类内容与 PlantUML。
+## When done
 
-## 完成时
-
-列出已写入文件路径，并提示用户可在同一会话内结合 PRD/调研迭代补充设计说明（仍不修改业务代码）。
+List files written; user may iterate with more PRD/research context (still no code).

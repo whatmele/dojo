@@ -1,14 +1,14 @@
 # {{workspace_name}}
 
-> 本工作区刚刚初始化，以下内容尚未生成。
+> This workspace was just initialized; content below is a placeholder.
 
-## 快速开始
+## Quick start
 
-1. 运行 `/dojo-init-context`，扫描各仓库并生成 **`docs/` 下的详细说明** + 更新本文件为**短索引**（总览、仓库表、指向 docs 的链接）
-2. 可附带说明，例如：`/dojo-init-context 重点关注各仓库之间的 API 通信协议`
+1. Run `/dojo-init-context` to scan repos: put **detailed notes under `docs/`** and keep **this `AGENTS.md` short** (overview table + links to docs).
+2. Optional hints, e.g. `/dojo-init-context focus on API contracts between repos`.
 
-详细设计、模块与构建说明等长文请放在 **`docs/`**，不要全部堆在本文件。
+Put long-form design and module notes in **`docs/`**, not only in this file.
 
-## 当前状态
+## Current state
 
-请阅读 @.dojo/context.md 获取当前工作区的完整上下文信息。
+Read `@.dojo/context.md` for the latest workspace context (when present).

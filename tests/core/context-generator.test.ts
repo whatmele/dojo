@@ -76,9 +76,9 @@ describe('buildContextMarkdown', () => {
 
     const md = buildContextMarkdown(tmpDir, testSession, testConfig);
     expect(md).toContain('auth-refactor');
-    expect(md).toContain('✅ 已完成');
+    expect(md).toContain('Done');
     expect(md).toContain('oauth-gateway');
-    expect(md).toContain('⬜ 未完成');
+    expect(md).toContain('Todo');
   });
 });
 

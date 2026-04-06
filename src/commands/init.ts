@@ -40,7 +40,7 @@ function resolveTemplatesDir(): string {
     }
   }
   throw new Error(
-    `未找到 Dojo 命令模板目录（已尝试：\n${candidates.join('\n')}\n请在包根目录执行 npm run build（会拷贝 src/templates 到 dist）。`,
+    `Dojo template directory not found (tried:\n${candidates.join('\n')}\nRun npm run build from the package root (copies src/templates to dist).`,
   );
 }
 
@@ -66,8 +66,8 @@ function safeWorkspaceDirSegment(workspaceName: string): string {
 }
 
 async function promptWorkspaceProfile(defaultName: string): Promise<{ name: string; description: string }> {
-  const name = await input({ message: '工作区名称:', default: defaultName });
-  const description = await input({ message: '工作区描述:' });
+  const name = await input({ message: 'Workspace name:', default: defaultName });
+  const description = await input({ message: 'Workspace description:' });
   return { name, description };
 }
 
@@ -76,18 +76,18 @@ async function promptAgentPreferences(): Promise<{
   agent_commands?: Partial<Record<AgentTool, string>>;
 }> {
   const agents = await checkbox({
-    message: '选择要适配的 AI 工具:',
+    message: 'AI tools to enable:',
     choices: AGENT_CHOICES,
   }) as AgentTool[];
 
   if (agents.length === 0) {
-    log.warn('未选择任何 AI 工具，默认使用 claude-code。');
+    log.warn('No AI tool selected; defaulting to claude-code.');
     agents.push('claude-code');
   }
 
   let agent_commands: Partial<Record<AgentTool, string>> | undefined;
   const wantCustomCli = await confirm({
-    message: '是否为所选工具配置自定义 CLI 启动命令？',
+    message: 'Configure custom CLI commands for the selected tools?',
     default: false,
   });
   if (wantCustomCli) {
@@ -95,7 +95,7 @@ async function promptAgentPreferences(): Promise<{
     for (const agent of agents) {
       const def = TOOL_COMMANDS[agent];
       const answer = await input({
-        message: `${agent} 启动命令:`,
+        message: `${agent} CLI command:`,
         default: def,
       });
       if (answer.trim() && answer.trim() !== def) {
@@ -117,7 +117,7 @@ async function applyInit(
   agents: AgentTool[],
   agent_commands?: Partial<Record<AgentTool, string>>,
 ): Promise<void> {
-  log.step('创建目录结构...');
+  log.step('Creating directory layout...');
   ensureDir(root);
   const dojoDir = path.join(root, DOJO_DIR);
   ensureDir(path.join(dojoDir, 'sessions'));
@@ -128,7 +128,7 @@ async function applyInit(
   ensureDir(path.join(root, 'repos', 'wiki'));
   ensureDir(path.join(root, '.agents', 'commands'));
 
-  log.step('写入配置文件...');
+  log.step('Writing config...');
   const config: WorkspaceConfig = {
     workspace: { name, description },
     agents,
@@ -140,14 +140,14 @@ async function applyInit(
   const wsState: WorkspaceState = { active_session: null };
   writeWorkspaceState(root, wsState);
 
-  log.step('复制默认模板...');
+  log.step('Copying default templates...');
   const templatesDir = resolveTemplatesDir();
   const commandsTemplateDir = path.join(templatesDir, 'commands');
   const targetCommandsDir = path.join(dojoDir, 'commands');
 
   const templateFiles = fs.readdirSync(commandsTemplateDir).filter(f => f.endsWith('.md'));
   if (templateFiles.length === 0) {
-    throw new Error(`命令模板目录为空: ${commandsTemplateDir}`);
+    throw new Error(`Command template directory is empty: ${commandsTemplateDir}`);
   }
   for (const file of templateFiles) {
     const content = readText(path.join(commandsTemplateDir, file));
@@ -157,7 +157,7 @@ async function applyInit(
   let agentsMdTemplate = readText(path.join(templatesDir, 'AGENTS.md'));
   agentsMdTemplate = agentsMdTemplate
     .replace('{{workspace_name}}', name)
-    .replace('{{workspace_description}}', description || '（请在此处填写工作区概述）');
+    .replace('{{workspace_description}}', description || '(Add a short workspace summary here.)');
   writeText(path.join(root, 'AGENTS.md'), agentsMdTemplate);
 
   const gitignoreContent = readText(path.join(templatesDir, 'gitignore'));
@@ -165,7 +165,7 @@ async function applyInit(
 
   distributeCommands(root, null, agents);
 
-  log.step('初始化 Git 仓库...');
+  log.step('Initializing Git repository...');
   if (!fileExists(path.join(root, '.git'))) {
     await initRepo(root);
   }
@@ -173,26 +173,26 @@ async function applyInit(
 }
 
 async function promptOptionalRepos(root: string): Promise<void> {
-  let addMore = await confirm({ message: '是否现在添加仓库？', default: true });
+  let addMore = await confirm({ message: 'Add a Git repository now?', default: true });
 
   while (addMore) {
-    const gitUrl = await input({ message: '仓库 Git 地址:' });
+    const gitUrl = await input({ message: 'Git remote URL:' });
     const repoName = gitUrl.match(/\/([^/]+?)(?:\.git)?$/)?.[1] ?? 'unknown-repo';
 
     const repoType = await select({
-      message: `仓库类型 (${repoName}):`,
+      message: `Repo type (${repoName}):`,
       choices: [
-        { name: 'biz — 业务仓库', value: 'biz' as RepoType },
-        { name: 'dev — 开发工具仓库', value: 'dev' as RepoType },
-        { name: 'wiki — 知识库仓库', value: 'wiki' as RepoType },
+        { name: 'biz — product / services', value: 'biz' as RepoType },
+        { name: 'dev — tooling', value: 'dev' as RepoType },
+        { name: 'wiki — knowledge / reference', value: 'wiki' as RepoType },
       ],
     });
 
-    const repoDesc = await input({ message: '仓库描述:' });
+    const repoDesc = await input({ message: 'Repository description:' });
     const repoPath = `repos/${repoType}/${repoName}`;
     const fullPath = path.join(root, repoPath);
 
-    log.step(`克隆 ${repoName}...`);
+    log.step(`Cloning ${repoName}...`);
     try {
       await cloneRepo(gitUrl, fullPath);
       const repoConfig: RepoConfig = {
@@ -204,14 +204,14 @@ async function promptOptionalRepos(root: string): Promise<void> {
         description: repoDesc,
       };
       addRepo(root, repoConfig);
-      log.success(`仓库 "${repoName}" 已添加。`);
+      log.success(`Repository "${repoName}" added.`);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      log.error(`克隆失败: ${msg}`);
+      log.error(`Clone failed: ${msg}`);
     }
 
     console.log();
-    addMore = await confirm({ message: '继续添加仓库？', default: false });
+    addMore = await confirm({ message: 'Add another repository?', default: false });
   }
 }
 
@@ -226,22 +226,22 @@ function formatCdIntoWorkspace(fromCwd: string, workspaceRoot: string): string {
 function printNextSteps(options?: { workspaceRoot: string }): void {
   const cwd = process.cwd();
   console.log();
-  log.info('下一步：');
+  log.info('Next steps:');
   if (options?.workspaceRoot) {
     const resolvedWs = path.resolve(options.workspaceRoot);
     const resolvedCwd = path.resolve(cwd);
     if (resolvedWs !== resolvedCwd) {
       const cdCmd = formatCdIntoWorkspace(resolvedCwd, resolvedWs);
-      log.info(`  ${cdCmd}  — 进入工作区后再执行：`);
+      log.info(`  ${cdCmd}  — then run:`);
     }
   }
-  log.info('  dojo session new  — 创建开发会话');
-  log.info('  dojo start        — 启动 AI 工具');
+  log.info('  dojo session new  — create a dev session');
+  log.info('  dojo start        — launch your AI tool');
 }
 
 async function doInit(root: string): Promise<void> {
   if (isDojoWorkspace(root)) {
-    log.error(`目录 "${root}" 已经是一个 Dojo 工作区。`);
+    log.error(`"${root}" is already a Dojo workspace.`);
     process.exit(1);
   }
 
@@ -253,8 +253,8 @@ async function doInit(root: string): Promise<void> {
   await applyInit(root, name, description, agents, agent_commands);
 
   const absRoot = path.resolve(root);
-  log.success(`工作区 "${name}" 初始化完成！`);
-  log.info(`根目录: ${absRoot}（配置在隐藏目录 ${path.join(absRoot, DOJO_DIR)}，请用 ls -a 查看）`);
+  log.success(`Workspace "${name}" initialized.`);
+  log.info(`Root: ${absRoot} (config in hidden ${path.join(absRoot, DOJO_DIR)} — use ls -a)`);
   console.log();
 
   await promptOptionalRepos(root);
@@ -273,10 +273,10 @@ async function doCreate(cliNameArg?: string): Promise<void> {
   if (cliNameArg?.trim()) {
     name = cliNameArg.trim();
   } else {
-    const raw = await input({ message: '工作区名称:' });
+    const raw = await input({ message: 'Workspace name:' });
     name = raw.trim();
     if (!name) {
-      log.error('工作区名称不能为空。');
+      log.error('Workspace name cannot be empty.');
       process.exit(1);
     }
   }
@@ -285,22 +285,22 @@ async function doCreate(cliNameArg?: string): Promise<void> {
   const targetDir = path.resolve(process.cwd(), dirSegment);
 
   if (isDojoWorkspace(targetDir)) {
-    log.error(`目录 "${dirSegment}" 已经是一个 Dojo 工作区。`);
+    log.error(`"${dirSegment}" is already a Dojo workspace.`);
     process.exit(1);
   }
 
   if (fs.existsSync(targetDir) && fs.readdirSync(targetDir).length > 0) {
-    log.error(`目录 "${dirSegment}" 已存在且非空。`);
+    log.error(`"${dirSegment}" already exists and is not empty.`);
     process.exit(1);
   }
 
-  const description = await input({ message: '工作区描述:' });
+  const description = await input({ message: 'Workspace description:' });
   const { agents, agent_commands } = await promptAgentPreferences();
   await applyInit(targetDir, name, description, agents, agent_commands);
 
   const absTarget = path.resolve(targetDir);
-  log.success(`工作区 "${name}" 初始化完成！`);
-  log.info(`根目录: ${absTarget}（配置在隐藏目录 ${path.join(absTarget, DOJO_DIR)}，请用 ls -a 查看）`);
+  log.success(`Workspace "${name}" initialized.`);
+  log.info(`Root: ${absTarget} (config in hidden ${path.join(absTarget, DOJO_DIR)} — use ls -a)`);
   console.log();
 
   await promptOptionalRepos(targetDir);
@@ -310,14 +310,14 @@ async function doCreate(cliNameArg?: string): Promise<void> {
 export function registerInitCommand(program: Command): void {
   program
     .command('init')
-    .description('在当前目录初始化 Dojo 工作区')
+    .description('Initialize a Dojo workspace in the current directory')
     .action(async () => {
       await doInit(process.cwd());
     });
 
   program
     .command('create [name]')
-    .description('新建目录并初始化（流程与 init 一致；名称无默认；完成后请 cd 进入子目录）')
+    .description('Create a subdirectory and initialize (same flow as init; optional name arg)')
     .action(async (name?: string) => {
       await doCreate(name);
     });

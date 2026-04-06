@@ -1,152 +1,136 @@
-# Dojo
+<h1 align="center">
+  <img src="docs/assets/dojo-banner.svg" width="520" alt="Dojo — Agent Workspace CLI" />
+</h1>
 
-```
-  ██████╗  ██████╗      ██╗ ██████╗
-  ██╔══██╗██╔═══██╗     ██║██╔═══██╗
-  ██║  ██║██║   ██║     ██║██║   ██║
-  ██║  ██║██║   ██║██   ██║██║   ██║
-  ██████╔╝╚██████╔╝╚█████╔╝╚██████╔╝
-  ╚═════╝  ╚═════╝  ╚════╝  ╚═════╝
-```
+<p align="center"><strong>Agent Workspace CLI</strong> — multi-repo workspaces, dev session lifecycle, and structured context for AI coding tools.</p>
 
-**Agent Workspace CLI** — 管理多仓库工作区、开发会话生命周期与 AI Agent 上下文
+**Languages:** this file is English (default on GitHub). [简体中文 README](README.zh-CN.md) is kept for reference.
 
 ---
 
-## 这是什么？
+## What is it?
 
-现有 AI coding 工具（Claude Code、Codex、Cursor、Trae）只能在单个目录下工作。但实际研发中，一个需求往往跨越多个 Git 仓库，且经历调研、设计、任务拆解、开发测试、Review 等多个阶段。
+Most AI coding tools (Claude Code, Codex, Cursor, Trae) assume a single folder. Real work often spans several Git repos and phases: research, design, breakdown, dev/test, review, and ship.
 
-**Dojo 是一个 CLI 工具**，它不是 AI agent，而是为各种 AI coding 工具提供工作台：
+**Dojo is a CLI harness** (not an agent). It gives those tools:
 
-- **多仓库管理** — 统一管理业务仓库、工具仓库、知识库仓库
-- **开发会话** — 每个需求迭代都有独立的分支、产物目录和状态追踪
-- **结构化上下文** — 动态生成上下文文档，让 AI 接手工作时能快速理解全局
-- **命令模板** — 预定义的 prompt 模板（PRD、调研、设计、拆解、开发、Review、提交），覆盖完整开发生命周期
+- **Multi-repo layout** — biz / dev / wiki repos in one workspace  
+- **Sessions** — per-iteration branches, artifact folders, and status  
+- **Structured context** — regenerated docs so agents see the latest state  
+- **Command templates** — slash-command prompts for PRD, research, design, tasks, dev loop, review, commit, docs, etc.
 
-## 快速开始
+## Quick start
 
 ```bash
-# 安装
 npm install -g dojo-cli
 
-# 创建工作区（二选一）
-mkdir my-workspace && cd my-workspace && dojo init   # 在当前目录初始化
-# 或：dojo create [名称]                            # 在当前路径下新建子目录并初始化
+# New workspace (pick one)
+mkdir my-workspace && cd my-workspace && dojo init   # init in current directory
+# or: dojo create [name]                             # create a child folder and init there
 
-# 添加仓库
 dojo repo add git@github.com:org/backend-service.git
 dojo repo add --local ./existing-repo
 
-# 创建开发会话
 dojo session new
-
-# 启动 AI 工具
 dojo start
 ```
 
-## 工作流程
+## Flow
 
 ```
-dojo init          初始化工作区
+dojo init / dojo create
      ↓
-dojo repo add      添加仓库
+dojo repo add
      ↓
-dojo start         启动 AI 工具
+dojo start
      ↓
-/dojo-init-context 让 AI 扫描仓库：详细说明写入 docs/，AGENTS.md 保持短索引
+/dojo-init-context — scan repos; long-form docs → docs/, keep AGENTS.md short
      ↓
-dojo session new   创建开发会话（自动创建分支）
+dojo session new
      ↓
-┌─ /dojo-think-and-clarify  澄清需求前先提问
-├─ /dojo-prd            梳理需求
-├─ /dojo-research       项目调研
-├─ /dojo-tech-design    技术方案
-├─ /dojo-task-decompose 任务拆解
-├─ /dojo-dev-loop       开发测试循环
-├─ /dojo-review         代码 Review
-├─ /dojo-commit         提交代码
-└─ /dojo-gen-doc        生成文档
+┌─ /dojo-think-and-clarify
+├─ /dojo-prd
+├─ /dojo-research
+├─ /dojo-tech-design
+├─ /dojo-task-decompose
+├─ /dojo-dev-loop
+├─ /dojo-review
+├─ /dojo-commit
+└─ /dojo-gen-doc
      ↓
-dojo session resume 切换/恢复会话
+dojo session resume
 ```
 
-## CLI 命令
+## CLI commands
 
-| 命令 | 说明 |
-|------|------|
-| `dojo init` | 在当前目录初始化工作区（交互式） |
-| `dojo create [name]` | 新建子目录并初始化（流程与 init 一致） |
-| `dojo repo add <url>` | 克隆并注册仓库 |
-| `dojo repo add --local <path>` | 注册本地已有仓库 |
-| `dojo repo remove <name>` | 移除仓库 |
-| `dojo repo sync [name]` | 同步仓库代码 |
-| `dojo session new` | 新建开发会话 |
-| `dojo session resume <id>` | 恢复已有会话 |
-| `dojo context reload` | 刷新上下文和命令模板 |
-| `dojo start [tool]` | 刷新上下文并启动 AI 工具 |
+| Command | Description |
+|---------|-------------|
+| `dojo init` | Initialize workspace here (interactive) |
+| `dojo create [name]` | Create a subdirectory and initialize (same flow as `init`) |
+| `dojo repo add <url>` | Clone and register a repo |
+| `dojo repo add --local <path>` | Register an existing local repo |
+| `dojo repo remove <name>` | Remove from workspace config |
+| `dojo repo sync [name]` | `git pull` for one or all repos |
+| `dojo session new` | New dev session |
+| `dojo session resume <id>` | Resume a session |
+| `dojo context reload` | Refresh context and command stubs |
+| `dojo start [tool]` | Refresh context and launch an AI tool |
 
-## AI 命令模板
+## Slash commands (in the AI tool)
 
-在 AI 工具中触发，覆盖完整开发生命周期：
+| Command | Phase | May edit product code |
+|---------|-------|------------------------|
+| `/dojo-init-context` | Index + docs | No |
+| `/dojo-think-and-clarify` | Clarify | No |
+| `/dojo-prd` | Requirements | No |
+| `/dojo-research` | Research | No |
+| `/dojo-tech-design` | Design | No |
+| `/dojo-task-decompose` | Breakdown | No |
+| `/dojo-dev-loop` | Dev | Yes |
+| `/dojo-review` | Review | No |
+| `/dojo-commit` | Commit | No |
+| `/dojo-gen-doc` | Docs | No |
 
-| 命令 | 阶段 | 可改代码 |
-|------|------|---------|
-| `/dojo-init-context` | 初始化索引与 docs | ❌ |
-| `/dojo-think-and-clarify` | 澄清与提问 | ❌ |
-| `/dojo-prd` | 需求 | ❌ |
-| `/dojo-research` | 调研 | ❌ |
-| `/dojo-tech-design` | 设计 | ❌ |
-| `/dojo-task-decompose` | 拆解 | ❌ |
-| `/dojo-dev-loop` | 开发 | ✅ |
-| `/dojo-review` | 审查 | ❌ |
-| `/dojo-commit` | 提交 | ❌ |
-| `/dojo-gen-doc` | 文档 | ❌ |
-
-## 工作区结构
+## Workspace layout
 
 ```
 my-workspace/
 ├── .dojo/
-│   ├── config.json          # 工作区配置
-│   ├── state.json           # 当前状态（gitignored）
-│   ├── context.md           # 动态上下文（gitignored）
-│   ├── commands/            # 命令模板源文件
-│   └── sessions/            # 会话产物
-│       └── <session-id>/
-│           ├── state.json
-│           ├── product-requirements/
-│           ├── research/
-│           ├── tech-design/
-│           └── tasks/
-│               ├── manifest.json
-│               └── <task-name>/
-├── .agents/commands/        # 生成的命令文件（源）
-├── .claude/commands/        # dojo-*.md → 指向 .agents/commands 同名文件（文件级软链）
-├── .trae/commands/          # 同上（若配置 Trae）
-├── repos/                   # Git 仓库
-├── docs/                    # 项目文档
-└── AGENTS.md                # AI 工作区入口
+│   ├── config.json
+│   ├── state.json          # often gitignored
+│   ├── context.md          # generated (often gitignored)
+│   ├── commands/           # template sources
+│   └── sessions/<session-id>/...
+├── .agents/commands/       # generated stubs (source of truth)
+├── .claude/commands/       # file symlinks: dojo-*.md → ../.agents/commands/
+├── .trae/commands/         # same pattern if Trae is enabled
+├── repos/
+├── docs/
+└── AGENTS.md
 ```
 
-## 支持的 AI 工具
+## Supported tools
 
-- Claude Code
-- Codex (OpenAI)
-- Cursor
-- Trae
+Claude Code, Codex (OpenAI), Cursor, Trae.
 
-Claude / Trae：对 `dojo-*.md` 使用**文件级**软链指向 `.agents/commands`；Codex / Cursor 直接使用 `.agents/commands`。无活跃会话时仍会生成「无会话版」commands（部分命令含占位提示）。
+Claude / Trae use **per-file** symlinks for `dojo-*.md` into `.agents/commands`. Codex / Cursor read `.agents/commands` directly. With no active session, a “no-session” stub set is still generated (some entries include placeholder warnings).
 
-## 开发
+## Development
 
 ```bash
-git clone https://github.com/org/dojo.git
+git clone https://github.com/<org>/dojo.git
 cd dojo
 npm install
 npm test
-./scripts/dev-link.sh  # 编译并链接到全局
+./scripts/dev-link.sh
 ```
+
+## Docs (English)
+
+- [docs/product-requirement.md](docs/product-requirement.md) — product spec  
+- [docs/tech-design.md](docs/tech-design.md) — technical design  
+
+Chinese archive: [docs/zh/](docs/zh/)
 
 ## License
 

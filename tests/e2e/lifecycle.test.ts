@@ -172,7 +172,7 @@ describe('E2E lifecycle', () => {
     expect(contextMd).toContain('prd.md');
     expect(contextMd).toContain('oauth-analysis.md');
     expect(contextMd).toContain('auth-refactor');
-    expect(contextMd).toContain('⬜ 未完成');
+    expect(contextMd).toContain('Todo');
 
     // AGENTS.md references context.md
     const agentsMd = readText(path.join(workspaceRoot, 'AGENTS.md'));

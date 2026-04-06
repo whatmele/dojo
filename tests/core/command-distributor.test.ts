@@ -141,7 +141,7 @@ describe('distributeCommands', () => {
     distributeCommands(tmpDir, null, ['codex']);
 
     const result = fs.readFileSync(path.join(tmpDir, '.agents', 'commands', 'dojo-prd.md'), 'utf-8');
-    expect(result).toContain('无活跃会话');
+    expect(result).toContain('No active session');
     expect(result).toContain('no-active-session');
   });
 });
