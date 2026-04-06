@@ -1,0 +1,60 @@
+#!/usr/bin/env node
+
+import { Command } from 'commander';
+import { printBanner } from '../src/utils/logger.js';
+import { registerInitCommand } from '../src/commands/init.js';
+import { registerRepoCommand } from '../src/commands/repo.js';
+import { registerSessionCommand } from '../src/commands/session.js';
+import { registerContextCommand } from '../src/commands/context.js';
+import { registerStartCommand } from '../src/commands/start.js';
+
+const program = new Command();
+
+program
+  .name('dojo')
+  .description('Agent Workspace CLI — 管理多仓库工作区、开发会话与 AI Agent 上下文')
+  .version('0.1.0')
+  .hook('preAction', (thisCommand) => {
+    if (thisCommand.args.length === 0 && thisCommand === program) {
+      printBanner();
+    }
+  });
+
+program.configureOutput({
+  outputError: (str, write) => write(str),
+});
+
+registerInitCommand(program);
+registerRepoCommand(program);
+registerSessionCommand(program);
+registerContextCommand(program);
+registerStartCommand(program);
+
+if (process.argv.length <= 2) {
+  printBanner();
+  console.log();
+}
+
+function isPromptInterrupt(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { name?: string; message?: string };
+  return e.name === 'ExitPromptError' || Boolean(e.message?.includes('force closed'));
+}
+
+process.on('uncaughtException', (err) => {
+  if (isPromptInterrupt(err)) {
+    console.log('\n');
+    process.exit(0);
+  }
+  console.error(err);
+  process.exit(1);
+});
+
+program.parseAsync().catch((err) => {
+  if (isPromptInterrupt(err)) {
+    console.log('\n');
+    process.exit(0);
+  }
+  console.error(err);
+  process.exit(1);
+});
