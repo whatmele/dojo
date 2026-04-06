@@ -68,7 +68,3 @@ npx tsc --noEmit
 
 - 产品需求：`docs/product-requirement.md`
 - 技术设计：`docs/tech-design.md`
-
-## 当前状态
-
-请阅读 @.dojo/context.md 获取当前工作区的完整上下文信息（如果存在）。
