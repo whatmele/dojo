@@ -24,12 +24,12 @@ export function registerContextCommand(program: Command): void {
 
       if (session) {
         log.step(`Reloading context for session "${session.id}"...`);
-        distributeCommands(root, session.id, config.agents);
+        await distributeCommands(root, session.id, config.agents);
         await generateContext(root, session, config);
         log.success('Context and command stubs refreshed.');
       } else {
         log.step('No active session — refreshing no-session command stubs and clearing context.md...');
-        distributeCommands(root, null, config.agents);
+        await distributeCommands(root, null, config.agents);
         writeText(path.join(root, DOJO_DIR, 'context.md'), '');
         log.success('Command stubs refreshed; context.md cleared.');
       }

@@ -7,6 +7,9 @@ import { registerRepoCommand } from '../src/commands/repo.js';
 import { registerSessionCommand } from '../src/commands/session.js';
 import { registerContextCommand } from '../src/commands/context.js';
 import { registerStartCommand } from '../src/commands/start.js';
+import { registerTemplateCommand } from '../src/commands/template.js';
+import { registerArtifactCommand } from '../src/commands/artifact.js';
+import { registerCompletionCommand } from '../src/commands/completion.js';
 
 const program = new Command();
 
@@ -29,6 +32,9 @@ registerRepoCommand(program);
 registerSessionCommand(program);
 registerContextCommand(program);
 registerStartCommand(program);
+registerTemplateCommand(program);
+registerArtifactCommand(program);
+registerCompletionCommand(program);
 
 if (process.argv.length <= 2) {
   printBanner();

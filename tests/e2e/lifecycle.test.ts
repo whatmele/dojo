@@ -26,6 +26,7 @@ async function createBareRepo(name: string): Promise<string> {
 async function initDojoWorkspace(root: string, config: WorkspaceConfig): Promise<void> {
   ensureDir(path.join(root, '.dojo', 'sessions'));
   ensureDir(path.join(root, '.dojo', 'commands'));
+  ensureDir(path.join(root, '.dojo', 'artifacts'));
   ensureDir(path.join(root, '.agents', 'commands'));
   ensureDir(path.join(root, 'docs'));
   ensureDir(path.join(root, 'repos', 'biz'));
@@ -47,11 +48,11 @@ async function initDojoWorkspace(root: string, config: WorkspaceConfig): Promise
 
   writeText(
     path.join(root, '.dojo', 'commands', 'dojo-prd.md'),
-    'Output to .dojo/sessions/${dojo_current_session_id}/product-requirements/\nTopic: $ARGUMENTS',
+    '<dojo_write_block artifact="product-requirement" />\n\nTopic: $ARGUMENTS',
   );
   writeText(
     path.join(root, '.dojo', 'commands', 'dojo-research.md'),
-    'Output to .dojo/sessions/${dojo_current_session_id}/research/\nTopic: $ARGUMENTS',
+    '<dojo_write_block artifact="research" />\n\nTopic: $ARGUMENTS',
   );
 
   await initRepo(root);
@@ -131,7 +132,7 @@ describe('E2E lifecycle', () => {
     await repoGitObj.checkoutLocalBranch('feature/user-auth');
 
     // distribute commands
-    distributeCommands(workspaceRoot, sessionId, config.agents);
+    await distributeCommands(workspaceRoot, sessionId, config.agents);
 
     // verify commands distributed
     const prdCmd = readText(path.join(workspaceRoot, '.agents', 'commands', 'dojo-prd.md'));
@@ -213,7 +214,7 @@ describe('E2E lifecycle', () => {
     writeSessionState(workspaceRoot, sessionId, resumedState);
     writeWorkspaceState(workspaceRoot, { active_session: sessionId });
 
-    distributeCommands(workspaceRoot, sessionId, config.agents);
+    await distributeCommands(workspaceRoot, sessionId, config.agents);
     await generateContext(workspaceRoot, resumedState, config);
 
     // verify resumed correctly

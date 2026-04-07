@@ -208,7 +208,7 @@ export function registerSessionCommand(program: Command): void {
       writeWorkspaceState(root, { active_session: id });
 
       log.step('Refreshing command stubs and context...');
-      distributeCommands(root, id, config.agents);
+      await distributeCommands(root, id, config.agents);
       await generateContext(root, sessionState, config);
 
       log.success(`Session "${id}" created and active.`);
@@ -275,7 +275,7 @@ export function registerSessionCommand(program: Command): void {
       writeWorkspaceState(root, { active_session: sessionId });
 
       log.step('Refreshing command stubs and context...');
-      distributeCommands(root, sessionId, config.agents);
+      await distributeCommands(root, sessionId, config.agents);
       await generateContext(root, targetSession, config);
 
       log.success(`Session "${sessionId}" resumed and active.`);

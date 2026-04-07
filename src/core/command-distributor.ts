@@ -1,11 +1,21 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { DOJO_DIR, AGENTS_COMMANDS_DIR, AGENT_COMMAND_DIRS } from '../types.js';
-import type { AgentTool } from '../types.js';
+import {
+  DOJO_DIR,
+  AGENTS_COMMANDS_DIR,
+  AGENTS_SKILLS_DIR,
+  AGENT_COMMAND_DIRS,
+  AGENT_SKILL_DIRS,
+} from '../types.js';
+import type { AgentTool, WorkspaceConfig } from '../types.js';
 import { listFiles, readText, writeText, ensureDir, createFileSymlink } from '../utils/fs.js';
-
-/** 无会话时仍允许完整语义（不依赖会话目录占位）的模板。 */
-const SESSION_OPTIONAL_FILES = new Set(['dojo-gen-doc.md', 'dojo-init-context.md']);
+import { readConfig } from './config.js';
+import {
+  expandTemplateArtifactSyntax,
+  getTemplateScope,
+  splitTemplateFrontmatter,
+  validateTemplateContent,
+} from './protocol.js';
 
 const MARK_SESSION_START = '<!-- DOJO_SESSION_ONLY -->';
 const MARK_SESSION_END = '<!-- /DOJO_SESSION_ONLY -->';
@@ -35,11 +45,16 @@ function unwrapTaggedBlock(source: string, start: string, end: string): string {
   }
 }
 
-/**
- * 替换会话 ID，并按标记剥离/展开「仅会话 / 仅无会话」段落。
- */
-export function applyCommandSessionPlaceholders(content: string, sessionId: string | null): string {
-  let out = content.replace(/\$\{dojo_current_session_id\}/g, sessionId ?? '');
+export function applyCommandSessionPlaceholders(
+  content: string,
+  sessionId: string | null,
+  noSessionValue = '',
+): string {
+  const token = sessionId ?? noSessionValue;
+  let out = content
+    .replace(/\$\{dojo_current_session_id\}/g, token)
+    .replace(/\$\{session_id\}/g, token);
+
   if (sessionId) {
     out = unwrapTaggedBlock(out, MARK_SESSION_START, MARK_SESSION_END);
     out = removeTaggedBlock(out, MARK_NOSESSION_START, MARK_NOSESSION_END);
@@ -51,15 +66,20 @@ export function applyCommandSessionPlaceholders(content: string, sessionId: stri
 }
 
 function noSessionBannerForSessionBoundCommands(): string {
-  return (
-    '> **Dojo**: No active session. Run `dojo session new` first. The segment `no-active-session` in paths is a **placeholder only** — do not treat it as a real session id.\n\n'
-  );
+  return '> **Dojo**: No active session. Run `dojo session new` first. The segment `no-active-session` in paths is a placeholder only.\n\n';
 }
 
-function materializeAgentsCommands(
+function prependAfterFrontmatter(content: string, prefix: string): string {
+  const parts = splitTemplateFrontmatter(content);
+  if (!parts.frontmatter) return prefix + content;
+  return `${parts.frontmatter}${prefix}${parts.body}`;
+}
+
+async function materializeAgentsCommands(
   root: string,
   sessionId: string | null,
-): void {
+  config: WorkspaceConfig,
+): Promise<void> {
   const sourceDir = path.join(root, DOJO_DIR, 'commands');
   const targetDir = path.join(root, AGENTS_COMMANDS_DIR);
   ensureDir(targetDir);
@@ -67,21 +87,33 @@ function materializeAgentsCommands(
   const files = listFiles(sourceDir).filter(f => f.endsWith('.md'));
 
   for (const file of files) {
-    let content = readText(path.join(sourceDir, file));
-
-    if (sessionId === null && !SESSION_OPTIONAL_FILES.has(file)) {
-      content = noSessionBannerForSessionBoundCommands() + content;
-      content = content.replace(/\$\{dojo_current_session_id\}/g, 'no-active-session');
-    } else {
-      content = content.replace(/\$\{dojo_current_session_id\}/g, sessionId ?? '');
+    const source = readText(path.join(sourceDir, file));
+    const issues = await validateTemplateContent(root, source);
+    if (issues.length > 0) {
+      throw new Error(`Invalid template ${file}: ${issues[0]}`);
     }
 
-    content = applyCommandSessionPlaceholders(content, sessionId);
+    const scope = getTemplateScope(source);
+    let content = source;
+    if (sessionId === null && scope === 'session') {
+      content = prependAfterFrontmatter(content, noSessionBannerForSessionBoundCommands());
+      content = applyCommandSessionPlaceholders(content, null, 'no-active-session');
+      content = await expandTemplateArtifactSyntax(content, root, config, {
+        sessionId: null,
+        noSessionPlaceholder: 'no-active-session',
+      });
+    } else {
+      content = applyCommandSessionPlaceholders(content, sessionId, sessionId === null ? 'no-active-session' : '');
+      content = await expandTemplateArtifactSyntax(content, root, config, {
+        sessionId,
+        noSessionPlaceholder: sessionId === null ? 'no-active-session' : '',
+      });
+    }
+
     writeText(path.join(targetDir, file), content);
   }
 }
 
-/** 将旧版「整个 commands 目录指向 .agents/commands」的目录软链迁移为真实目录。 */
 function migrateLegacyAgentCommandsDir(agentCmdDir: string, agentsCommandsDir: string): void {
   if (!fs.existsSync(agentCmdDir)) return;
   const stat = fs.lstatSync(agentCmdDir);
@@ -99,9 +131,23 @@ function migrateLegacyAgentCommandsDir(agentCmdDir: string, agentsCommandsDir: s
   }
 }
 
-/**
- * 仅为 `dojo-*.md` 在 `.claude/commands`、`.trae/commands` 等目录下创建指向 `.agents/commands` 同名文件的软链。
- */
+function migrateLegacyAgentSkillsDir(agentSkillDir: string, agentsSkillsDir: string): void {
+  if (!fs.existsSync(agentSkillDir)) return;
+  const stat = fs.lstatSync(agentSkillDir);
+  if (!stat.isSymbolicLink()) return;
+  let resolvedLink: string;
+  let resolvedAgents: string;
+  try {
+    resolvedLink = fs.realpathSync(agentSkillDir);
+    resolvedAgents = fs.realpathSync(agentsSkillsDir);
+  } catch {
+    return;
+  }
+  if (resolvedLink === resolvedAgents) {
+    fs.unlinkSync(agentSkillDir);
+  }
+}
+
 export function syncAgentDojoFileSymlinks(root: string, agents: AgentTool[]): void {
   const agentsCommandsDir = path.resolve(root, AGENTS_COMMANDS_DIR);
   if (!fs.existsSync(agentsCommandsDir)) {
@@ -130,22 +176,85 @@ export function syncAgentDojoFileSymlinks(root: string, agents: AgentTool[]): vo
     }
 
     for (const file of dojoFiles) {
-      const targetFile = path.join(agentsCommandsDir, file);
-      const linkFile = path.join(agentCmdDir, file);
-      createFileSymlink(targetFile, linkFile);
+      createFileSymlink(path.join(agentsCommandsDir, file), path.join(agentCmdDir, file));
     }
   }
 }
 
-/**
- * 从 `.dojo/commands` 生成 `.agents/commands`，并按所选 agent 同步 `dojo-*.md` 文件级软链。
- * @param sessionId 活跃会话 id；无会话时传 `null`（会话型命令会得到占位与提示；gen-doc / init-context 走无会话分支）。
- */
-export function distributeCommands(
+function materializeAgentsSkills(root: string): void {
+  const sourceDir = path.join(root, DOJO_DIR, 'skills');
+  const targetDir = path.join(root, AGENTS_SKILLS_DIR);
+  ensureDir(targetDir);
+
+  const ids = fs.existsSync(sourceDir)
+    ? fs.readdirSync(sourceDir, { withFileTypes: true })
+      .filter(entry => entry.isDirectory())
+      .map(entry => entry.name)
+      .sort()
+    : [];
+
+  const expected = new Set<string>();
+  for (const id of ids) {
+    const skillFile = path.join(sourceDir, id, 'SKILL.md');
+    if (!fs.existsSync(skillFile)) continue;
+    const targetFile = path.join(targetDir, `${id}.md`);
+    writeText(targetFile, readText(skillFile));
+    expected.add(`${id}.md`);
+  }
+
+  const existing = fs.existsSync(targetDir) ? listFiles(targetDir) : [];
+  for (const file of existing) {
+    if (!file.endsWith('.md')) continue;
+    if (expected.has(file)) continue;
+    try {
+      fs.unlinkSync(path.join(targetDir, file));
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+export function syncAgentDojoSkillFileSymlinks(root: string, agents: AgentTool[]): void {
+  const agentsSkillsDir = path.resolve(root, AGENTS_SKILLS_DIR);
+  if (!fs.existsSync(agentsSkillsDir)) {
+    ensureDir(agentsSkillsDir);
+  }
+
+  const skillFiles = listFiles(agentsSkillsDir).filter(f => f.endsWith('.md'));
+
+  for (const agent of agents) {
+    const relAgentDir = AGENT_SKILL_DIRS[agent];
+    if (!relAgentDir) continue;
+
+    const agentSkillDir = path.join(root, relAgentDir);
+    migrateLegacyAgentSkillsDir(agentSkillDir, agentsSkillsDir);
+    ensureDir(agentSkillDir);
+
+    const existing = fs.existsSync(agentSkillDir) ? listFiles(agentSkillDir) : [];
+    for (const name of existing) {
+      if (!name.endsWith('.md')) continue;
+      if (skillFiles.includes(name)) continue;
+      try {
+        fs.unlinkSync(path.join(agentSkillDir, name));
+      } catch {
+        /* ignore */
+      }
+    }
+
+    for (const file of skillFiles) {
+      createFileSymlink(path.join(agentsSkillsDir, file), path.join(agentSkillDir, file));
+    }
+  }
+}
+
+export async function distributeCommands(
   root: string,
   sessionId: string | null,
   agents: AgentTool[],
-): void {
-  materializeAgentsCommands(root, sessionId);
+): Promise<void> {
+  const config = readConfig(root);
+  await materializeAgentsCommands(root, sessionId, config);
+  materializeAgentsSkills(root);
   syncAgentDojoFileSymlinks(root, agents);
+  syncAgentDojoSkillFileSymlinks(root, agents);
 }

@@ -21,6 +21,7 @@ const testSession: SessionState = {
   external_link: 'https://example.com/issue/1',
   created_at: '2026-04-04T10:00:00Z',
   status: 'active',
+  workspace_branch: 'feature/my-session',
   repo_branches: { 'svc-a': 'feature/my-session' },
 };
 
@@ -38,34 +39,35 @@ afterEach(() => {
 });
 
 describe('buildContextMarkdown', () => {
-  it('generates context for empty session', () => {
-    const md = buildContextMarkdown(tmpDir, testSession, testConfig);
+  it('generates context for empty session', async () => {
+    const md = await buildContextMarkdown(tmpDir, testSession, testConfig);
     expect(md).toContain('用户认证重构');
     expect(md).toContain('my-session');
     expect(md).toContain('active');
-    expect(md).toContain('svc-a');
     expect(md).toContain('feature/my-session');
+    expect(md).toContain('svc-a');
+    expect(md).toContain('Startup and handoff context');
   });
 
-  it('includes PRD files in index', () => {
+  it('includes PRD files in index', async () => {
     fs.writeFileSync(
       path.join(tmpDir, '.dojo', 'sessions', 'my-session', 'product-requirements', 'prd.md'),
       '# PRD',
     );
-    const md = buildContextMarkdown(tmpDir, testSession, testConfig);
+    const md = await buildContextMarkdown(tmpDir, testSession, testConfig);
     expect(md).toContain('product-requirements/prd.md');
   });
 
-  it('includes research files in index', () => {
+  it('includes research files in index', async () => {
     fs.writeFileSync(
-      path.join(tmpDir, '.dojo', 'sessions', 'my-session', 'research', 'oauth-flow.md'),
+      path.join(tmpDir, '.dojo', 'sessions', 'my-session', 'research', 'README.md'),
       '# OAuth Flow',
     );
-    const md = buildContextMarkdown(tmpDir, testSession, testConfig);
-    expect(md).toContain('research/oauth-flow.md');
+    const md = await buildContextMarkdown(tmpDir, testSession, testConfig);
+    expect(md).toContain('Primary document: .dojo/sessions/my-session/research/README.md');
   });
 
-  it('includes task list with completion status', () => {
+  it('includes task list with completion status', async () => {
     const taskDir = path.join(tmpDir, '.dojo', 'sessions', 'my-session', 'tasks', 'auth-refactor');
     fs.mkdirSync(taskDir, { recursive: true });
     fs.writeFileSync(path.join(taskDir, 'state.json'), '{"is_completed": true}');
@@ -74,11 +76,10 @@ describe('buildContextMarkdown', () => {
     fs.mkdirSync(taskDir2, { recursive: true });
     fs.writeFileSync(path.join(taskDir2, 'state.json'), '{"is_completed": false}');
 
-    const md = buildContextMarkdown(tmpDir, testSession, testConfig);
+    const md = await buildContextMarkdown(tmpDir, testSession, testConfig);
     expect(md).toContain('auth-refactor');
     expect(md).toContain('Done');
     expect(md).toContain('oauth-gateway');
     expect(md).toContain('Todo');
   });
 });
-

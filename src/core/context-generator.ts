@@ -1,132 +1,87 @@
 import path from 'node:path';
 import { DOJO_DIR } from '../types.js';
-import type { SessionState, WorkspaceConfig, TaskState, TaskManifest } from '../types.js';
-import { writeText, fileExists, listFiles, listDirs, readJSON } from '../utils/fs.js';
+import type {
+  ArtifactPlugin,
+  ArtifactPluginHelpers,
+  SessionState,
+  WorkspaceConfig,
+} from '../types.js';
+import {
+  getContextArtifactOrder,
+  getContextConfig,
+  loadArtifactPlugins,
+  resolveArtifactDir,
+  validateContextArtifacts,
+} from './protocol.js';
+import { fileExists, listDirs, listFiles, readJSON, readText, writeText } from '../utils/fs.js';
 
-interface TaskInfo {
-  name: string;
-  description: string;
-  is_completed: boolean;
-  depends_on: string[];
+function normalizeSlashes(value: string): string {
+  return value.split(path.sep).join('/');
 }
 
-function scanFiles(dirPath: string): string[] {
-  return listFiles(dirPath).filter(f => f !== '.DS_Store');
-}
-
-function scanTasks(tasksDir: string, manifest: TaskManifest | null): TaskInfo[] {
-  if (manifest) {
-    return manifest.tasks.map(entry => {
-      const statePath = path.join(tasksDir, entry.name, 'state.json');
-      let is_completed = false;
-      if (fileExists(statePath)) {
-        try {
-          const state = readJSON<TaskState>(statePath);
-          is_completed = state.is_completed;
-        } catch { /* ignore */ }
-      }
-      return {
-        name: entry.name,
-        description: entry.description,
-        is_completed,
-        depends_on: entry.depends_on,
-      };
-    });
-  }
-
-  const taskDirs = listDirs(tasksDir);
-  return taskDirs.map(name => {
-    const statePath = path.join(tasksDir, name, 'state.json');
-    let is_completed = false;
-    if (fileExists(statePath)) {
+function buildHelpers(root: string, config: WorkspaceConfig, session: SessionState, plugins: Record<string, ArtifactPlugin>): ArtifactPluginHelpers {
+  return {
+    resolveArtifactDir: (id: string): string | null => {
+      const artifact = plugins[id];
+      if (!artifact) return null;
+      const rel = resolveArtifactDir(artifact, {
+        sessionId: session.id,
+        workspaceName: config.workspace.name,
+        workspaceDescription: config.workspace.description,
+      });
+      return rel ? path.join(root, rel) : null;
+    },
+    listMarkdownFiles: (dir: string | null): string[] => {
+      if (!dir || !fileExists(dir)) return [];
+      return listFiles(dir)
+        .filter(file => /\.(md|mdx)$/i.test(file))
+        .map(file => path.join(dir, file));
+    },
+    listDirs: (dir: string | null): string[] => {
+      if (!dir || !fileExists(dir)) return [];
+      return listDirs(dir).map(name => path.join(dir, name));
+    },
+    readText: (filePath: string, maxChars = 1200): string => {
+      if (!filePath || !fileExists(filePath)) return '';
+      return readText(filePath).slice(0, maxChars);
+    },
+    readJSON: <T>(filePath: string): T | null => {
+      if (!filePath || !fileExists(filePath)) return null;
       try {
-        const state = readJSON<TaskState>(statePath);
-        is_completed = state.is_completed;
-      } catch { /* ignore */ }
-    }
-    return { name, description: '', is_completed, depends_on: [] };
-  });
+        return readJSON<T>(filePath);
+      } catch {
+        return null;
+      }
+    },
+    relative: (filePath: string): string => normalizeSlashes(path.relative(root, filePath)),
+    pickPreferred: (files: string[], preferredNames: string[]): string | null => {
+      for (const preferredName of preferredNames) {
+        const found = files.find(file => path.basename(file).toLowerCase() === preferredName.toLowerCase());
+        if (found) return found;
+      }
+      return files[0] ?? null;
+    },
+  };
 }
 
-export function buildContextMarkdown(
-  root: string,
-  session: SessionState,
-  config: WorkspaceConfig,
-): string {
-  const sessionDir = path.join(root, DOJO_DIR, 'sessions', session.id);
-  const prdDir = path.join(sessionDir, 'product-requirements');
-  const researchDir = path.join(sessionDir, 'research');
-  const techDir = path.join(sessionDir, 'tech-design');
-  const tasksDir = path.join(sessionDir, 'tasks');
-
-  const prdFiles = scanFiles(prdDir);
-  const researchFiles = scanFiles(researchDir);
-  const techFiles = scanFiles(techDir);
-
-  const manifestPath = path.join(tasksDir, 'manifest.json');
-  let manifest: TaskManifest | null = null;
-  if (fileExists(manifestPath)) {
-    try { manifest = readJSON<TaskManifest>(manifestPath); } catch { /* ignore */ }
-  }
-  const tasks = scanTasks(tasksDir, manifest);
-
+function renderHeader(session: SessionState, config: WorkspaceConfig): string {
   const lines: string[] = [];
   lines.push('# Workspace context');
   lines.push('');
+  lines.push('Startup and handoff context for the active Dojo session.');
+  lines.push('');
   lines.push(`This workspace is working on: **${session.description}**`);
   lines.push('');
-
   lines.push('## Current session');
   lines.push(`- Session ID: ${session.id}`);
   lines.push(`- Status: ${session.status}`);
+  if (session.workspace_branch) {
+    lines.push(`- Workspace branch: ${session.workspace_branch}`);
+  }
   if (session.external_link) {
     lines.push(`- Link: ${session.external_link}`);
   }
   lines.push('');
-
-  lines.push('## File index');
-  lines.push('');
-
-  if (prdFiles.length > 0) {
-    lines.push('### PRD');
-    for (const f of prdFiles) {
-      lines.push(`- .dojo/sessions/${session.id}/product-requirements/${f}`);
-    }
-    lines.push('');
-  }
-
-  if (researchFiles.length > 0) {
-    lines.push('### Research');
-    for (const f of researchFiles) {
-      lines.push(`- .dojo/sessions/${session.id}/research/${f}`);
-    }
-    lines.push('');
-  }
-
-  if (techFiles.length > 0) {
-    lines.push('### Technical design');
-    for (const f of techFiles) {
-      lines.push(`- .dojo/sessions/${session.id}/tech-design/${f}`);
-    }
-    lines.push('');
-  }
-
-  if (tasks.length > 0) {
-    lines.push('### Tasks');
-    lines.push('');
-    lines.push('Suggested order:');
-    lines.push('');
-    lines.push('| # | Task | Description | Depends on | Status |');
-    lines.push('|---|------|-------------|------------|--------|');
-    for (let i = 0; i < tasks.length; i++) {
-      const t = tasks[i];
-      const status = t.is_completed ? 'Done' : 'Todo';
-      const deps = t.depends_on.length > 0 ? t.depends_on.join(', ') : '-';
-      const desc = t.description || '-';
-      lines.push(`| ${i + 1} | ${t.name} | ${desc} | ${deps} | ${status} |`);
-    }
-    lines.push('');
-  }
 
   const branchEntries = Object.entries(session.repo_branches);
   if (branchEntries.length > 0) {
@@ -135,13 +90,53 @@ export function buildContextMarkdown(
     lines.push('|------|------|--------|');
     for (const [repoName, branch] of branchEntries) {
       const repo = config.repos.find(r => r.name === repoName);
-      const type = repo?.type ?? 'unknown';
-      lines.push(`| ${repoName} | ${type} | ${branch} |`);
+      lines.push(`| ${repoName} | ${repo?.type ?? 'unknown'} | ${branch} |`);
     }
     lines.push('');
   }
 
+  lines.push('## Context notes');
+  lines.push('- This file is startup and handoff context, not a live mirror.');
+  lines.push('- Read the referenced artifact directories for full detail.');
+  lines.push('');
   return lines.join('\n');
+}
+
+export async function buildContextMarkdown(
+  root: string,
+  session: SessionState,
+  config: WorkspaceConfig,
+): Promise<string> {
+  await validateContextArtifacts(root, config);
+  const plugins = await loadArtifactPlugins(root);
+  const helpers = buildHelpers(root, config, session, plugins);
+  const blocks: string[] = [renderHeader(session, config)];
+
+  for (const artifactId of getContextArtifactOrder(config, plugins)) {
+    const artifact = plugins[artifactId];
+    if (!artifact) continue;
+
+    const relDir = resolveArtifactDir(artifact, {
+      sessionId: session.id,
+      workspaceName: config.workspace.name,
+      workspaceDescription: config.workspace.description,
+    });
+    const absDir = relDir ? path.join(root, relDir) : null;
+    const block = await artifact.renderContext({
+      root,
+      config,
+      session,
+      artifact,
+      dir: absDir,
+      helpers,
+    });
+    if (!block) continue;
+    const trimmed = block.trim();
+    if (!trimmed) continue;
+    blocks.push(trimmed);
+  }
+
+  return blocks.join('\n\n') + '\n';
 }
 
 export async function generateContext(
@@ -149,6 +144,6 @@ export async function generateContext(
   session: SessionState,
   config: WorkspaceConfig,
 ): Promise<void> {
-  const contextMd = buildContextMarkdown(root, session, config);
-  writeText(path.join(root, DOJO_DIR, 'context.md'), contextMd);
+  const content = await buildContextMarkdown(root, session, config);
+  writeText(path.join(root, DOJO_DIR, 'context.md'), content);
 }

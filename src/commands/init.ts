@@ -1,10 +1,9 @@
 import { Command } from 'commander';
 import path from 'node:path';
 import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { input, checkbox, confirm, select } from '@inquirer/prompts';
 import type { WorkspaceConfig, WorkspaceState, AgentTool, RepoType, RepoConfig } from '../types.js';
-import { DOJO_DIR } from '../types.js';
+import { DOJO_DIR, AGENTS_SKILLS_DIR } from '../types.js';
 import { writeConfig, addRepo } from '../core/config.js';
 import { writeWorkspaceState } from '../core/state.js';
 import { initRepo, addAndCommit, cloneRepo } from '../core/git.js';
@@ -13,6 +12,7 @@ import { isDojoWorkspace } from '../core/workspace.js';
 import { TOOL_COMMANDS } from './start.js';
 import { ensureDir, writeText, readText, fileExists } from '../utils/fs.js';
 import { log, printBanner } from '../utils/logger.js';
+import { resolveBuiltInArtifactsDir, resolveBuiltInSkillsDir, resolveBuiltInStarterDir } from '../core/builtins.js';
 
 const AGENT_CHOICES: { name: string; value: AgentTool }[] = [
   { name: 'Claude Code', value: 'claude-code' },
@@ -20,29 +20,6 @@ const AGENT_CHOICES: { name: string; value: AgentTool }[] = [
   { name: 'Cursor', value: 'cursor' },
   { name: 'Trae', value: 'trae' },
 ];
-
-/**
- * 模板与编译产物目录相邻（dist/src/templates）；若未执行完整 build 导致该目录缺失，
- * 则回退到源码树中的 src/templates，避免 .dojo/commands 被静默留空。
- */
-function resolveTemplatesDir(): string {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    path.resolve(here, '..', 'templates'),
-    path.resolve(here, '..', '..', '..', 'src', 'templates'),
-  ];
-  for (const dir of candidates) {
-    const agents = path.join(dir, 'AGENTS.md');
-    const commandsDir = path.join(dir, 'commands');
-    if (fs.existsSync(agents) && fs.existsSync(commandsDir)) {
-      const md = fs.readdirSync(commandsDir).filter(f => f.endsWith('.md'));
-      if (md.length > 0) return dir;
-    }
-  }
-  throw new Error(
-    `Dojo template directory not found (tried:\n${candidates.join('\n')}\nRun npm run build from the package root (copies src/templates to dist).`,
-  );
-}
 
 /** 由工作区名称生成磁盘目录名（小写、连字符），用于 create 落盘。 */
 function suggestedDirNameFromWorkspaceName(workspaceName: string): string {
@@ -120,13 +97,17 @@ async function applyInit(
   log.step('Creating directory layout...');
   ensureDir(root);
   const dojoDir = path.join(root, DOJO_DIR);
+  ensureDir(path.join(dojoDir, 'artifacts'));
   ensureDir(path.join(dojoDir, 'sessions'));
   ensureDir(path.join(dojoDir, 'commands'));
+  ensureDir(path.join(dojoDir, 'skills'));
+  ensureDir(path.join(dojoDir, 'types'));
   ensureDir(path.join(root, 'docs'));
   ensureDir(path.join(root, 'repos', 'biz'));
   ensureDir(path.join(root, 'repos', 'dev'));
   ensureDir(path.join(root, 'repos', 'wiki'));
   ensureDir(path.join(root, '.agents', 'commands'));
+  ensureDir(path.join(root, AGENTS_SKILLS_DIR));
 
   log.step('Writing config...');
   const config: WorkspaceConfig = {
@@ -134,16 +115,26 @@ async function applyInit(
     agents,
     ...(agent_commands ? { agent_commands } : {}),
     repos: [],
+    context: {
+      artifacts: ['product-requirement', 'research', 'tech-design', 'tasks', 'workspace-doc'],
+    },
   };
   writeConfig(root, config);
 
   const wsState: WorkspaceState = { active_session: null };
   writeWorkspaceState(root, wsState);
 
-  log.step('Copying default templates...');
-  const templatesDir = resolveTemplatesDir();
-  const commandsTemplateDir = path.join(templatesDir, 'commands');
+  log.step('Copying starter assets...');
+  const starterDir = resolveBuiltInStarterDir();
+  const commandsTemplateDir = path.join(starterDir, 'commands');
+  const workspaceTemplateDir = path.join(starterDir, 'workspace');
+  const typesTemplateDir = path.join(starterDir, 'types');
+  const artifactsTemplateDir = resolveBuiltInArtifactsDir();
+  const skillsTemplateDir = resolveBuiltInSkillsDir();
   const targetCommandsDir = path.join(dojoDir, 'commands');
+  const targetArtifactsDir = path.join(dojoDir, 'artifacts');
+  const targetSkillsDir = path.join(dojoDir, 'skills');
+  const targetTypesDir = path.join(dojoDir, 'types');
 
   const templateFiles = fs.readdirSync(commandsTemplateDir).filter(f => f.endsWith('.md'));
   if (templateFiles.length === 0) {
@@ -154,16 +145,32 @@ async function applyInit(
     writeText(path.join(targetCommandsDir, file), content);
   }
 
-  let agentsMdTemplate = readText(path.join(templatesDir, 'AGENTS.md'));
+  if (fs.existsSync(artifactsTemplateDir)) {
+    const artifactFiles = fs.readdirSync(artifactsTemplateDir).filter(f => /\.(js|mjs|ts|mts)$/.test(f));
+    for (const file of artifactFiles) {
+      const content = readText(path.join(artifactsTemplateDir, file));
+      writeText(path.join(targetArtifactsDir, file), content);
+    }
+  }
+
+  if (fs.existsSync(skillsTemplateDir)) {
+    fs.cpSync(skillsTemplateDir, targetSkillsDir, { recursive: true });
+  }
+
+  if (fs.existsSync(typesTemplateDir)) {
+    fs.cpSync(typesTemplateDir, targetTypesDir, { recursive: true });
+  }
+
+  let agentsMdTemplate = readText(path.join(workspaceTemplateDir, 'AGENTS.md'));
   agentsMdTemplate = agentsMdTemplate
     .replace('{{workspace_name}}', name)
     .replace('{{workspace_description}}', description || '(Add a short workspace summary here.)');
   writeText(path.join(root, 'AGENTS.md'), agentsMdTemplate);
 
-  const gitignoreContent = readText(path.join(templatesDir, 'gitignore'));
+  const gitignoreContent = readText(path.join(workspaceTemplateDir, 'gitignore'));
   writeText(path.join(root, '.gitignore'), gitignoreContent);
 
-  distributeCommands(root, null, agents);
+  await distributeCommands(root, null, agents);
 
   log.step('Initializing Git repository...');
   if (!fileExists(path.join(root, '.git'))) {

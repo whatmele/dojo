@@ -32,10 +32,10 @@ export function registerStartCommand(program: Command): void {
 
       log.step('Refreshing context...');
       if (session) {
-        distributeCommands(root, session.id, config.agents);
+        await distributeCommands(root, session.id, config.agents);
         await generateContext(root, session, config);
       } else {
-        distributeCommands(root, null, config.agents);
+        await distributeCommands(root, null, config.agents);
         writeText(path.join(root, DOJO_DIR, 'context.md'), '');
         log.dim('  No active session — no-session command stubs synced; context.md cleared.');
       }
