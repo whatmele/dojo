@@ -2,41 +2,83 @@
   <img src="docs/assets/dojo-banner.svg" width="520" alt="Dojo — Agent Workspace Runtime CLI" />
 </h1>
 
-<p align="center"><strong>Agent Workspace Runtime CLI</strong> — session-aware multi-repo workspaces, artifact plugins, structured prompt templates, and startup context for AI coding tools.</p>
+<p align="center"><strong>Session-aware runtime for AI coding workspaces</strong></p>
 
-## What Dojo is
+<p align="center">Multi-repo branch orchestration, artifact-aware prompts, deterministic startup context, and one shared contract across Claude Code, Codex, Cursor, and Trae.</p>
 
-Dojo is a CLI harness/runtime for AI coding workspaces.
+<p align="center">
+  <code>session</code>
+  ·
+  <code>artifact plugin</code>
+  ·
+  <code>template</code>
+  ·
+  <code>context</code>
+</p>
 
-It is not an agent. It does not replace Git, CI, or issue tracking.
+## Why Dojo Exists
 
-It gives AI tools one shared workspace contract for:
+Most AI coding setups break down at the workspace boundary.
 
-- multi-repo inventory
-- session lifecycle and session switching
+The tool may be smart, but the environment around it is still vague:
+
+- which work item is active right now?
+- which repos and branches belong to that work item?
+- where should requirements, research, design, and task outputs live?
+- what should the next AI session read before it starts?
+
+Dojo solves that layer.
+
+It is not an agent.
+It is not a replacement for Git, CI, or issue tracking.
+
+It is the runtime that makes an AI coding workspace legible, switchable, and recoverable.
+
+## What It Gives You
+
+Dojo gives AI tools one consistent workspace contract for:
+
+- multi-repo inventory and baseline branches
+- session lifecycle and safe branch switching
 - artifact-aware prompt templates
-- generated startup/handoff context
-- built-in authoring guidance for extending the system safely
+- startup and handoff context generation
+- reusable local extension points for templates, artifact plugins, and skills
 
-## The four core concepts
+## Why It Feels Different
 
-Dojo is intentionally small. The runtime should be understood through only four concepts:
+What makes Dojo strong is not “more prompts”.
+It is that runtime state and Git state are treated as first-class product concerns.
 
-1. `session`
-2. `artifact plugin`
-3. `template`
-4. `context`
+- `session` tells Dojo which work item is active
+- `template` tells the AI what to do
+- `artifact plugin` tells Dojo where outputs live and how they render into context
+- `context` gives the next run a deterministic on-disk handoff point
 
-### Session
+That means the AI is not starting from chat memory alone.
+It is starting from a real workspace state model.
 
-A session represents one work item. It owns:
+## The Four Core Concepts
+
+Dojo stays intentionally small.
+The runtime should be understandable through just four concepts.
+
+| Concept | What it represents | Why it matters |
+|---------|--------------------|----------------|
+| `session` | One work item across the workspace | Lets Dojo switch root/repo branches as one coherent state |
+| `artifact plugin` | One output type such as PRD, research, or tasks | Controls storage layout and context rendering |
+| `template` | One reusable AI command contract | Gives tools a stable prompt surface tied to artifact ids, not hard-coded paths |
+| `context` | Startup and handoff state | Gives the next run a trustworthy view of the current workspace |
+
+### `session`
+
+A session owns:
 
 - the session id and description
 - the workspace root branch
 - the participating repo branches
 - the session artifact directories under `.dojo/sessions/<session-id>/`
 
-### Artifact plugin
+### `artifact plugin`
 
 An artifact plugin is the only artifact extension mechanism.
 
@@ -59,7 +101,7 @@ Workspace-local artifact plugins live under `.dojo/artifacts/`.
 They can be authored in `.ts` or `.js`, with TypeScript preferred.
 `dojo init` installs `.dojo/types/dojo-artifact-plugin.d.ts` so plugin helpers are discoverable while authoring.
 
-### Template
+### `template`
 
 A template is a Markdown file under `.dojo/commands/`.
 
@@ -77,7 +119,7 @@ Template body syntax:
 - session blocks such as `<!-- DOJO_SESSION_ONLY -->`
 - directives such as `<dojo_read_block artifacts="research,tasks" />`
 
-### Context
+### `context`
 
 `.dojo/context.md` is generated startup and handoff context.
 
@@ -85,58 +127,40 @@ It is not a live mirror of every file change during an already-running AI sessio
 
 Its job is to tell the next AI session:
 
-- which session is active
-- which branches are active
+- which session or baseline mode is active
+- which branches are currently expected
 - which artifact directories matter
 - where to read next
 
-## The closed loop
+## Runtime Loop
 
 Dojo is designed as a closed loop:
 
-1. register workspace state in `.dojo/config.json`
-2. create or resume a session
-3. switch the workspace root branch and repo branches together
-4. materialize templates into `.agents/commands/`
-5. materialize skills into `.agents/skills/<skill-id>/SKILL.md` and symlink supported tool skill directories
-6. run a built-in or custom template
-7. write outputs into artifact plugin directories
-8. regenerate `.dojo/context.md`
-9. let the next prompt continue from state on disk
+```mermaid
+flowchart LR
+    A["Register workspace in .dojo/config.json"] --> B["Create or resume a session"]
+    B --> C["Switch root + repo branches into one target state"]
+    C --> D["Render templates into .agents/commands/"]
+    D --> E["Render context into .dojo/context.md"]
+    E --> F["Run AI tool against current workspace state"]
+    F --> G["Write outputs into artifact directories"]
+    G --> E
+```
 
 That loop is the product.
 
-## What The Main Commands Actually Do
+## At A Glance
 
-### `dojo session new` / `dojo session resume`
-
-These commands:
-
-1. select the active work item
-2. switch the workspace root branch
-3. switch the participating repo branches
-4. regenerate rendered commands
-5. regenerate `.dojo/context.md`
-
-### `dojo context reload`
-
-This command refreshes disk-backed AI state without launching a tool:
-
-- re-renders `.agents/commands/*.md`
-- regenerates `.dojo/context.md` when a session is active
-- clears `.dojo/context.md` when there is no active session
-
-### `dojo start`
-
-This command is the usual entry point for day-to-day use:
-
-1. detect the active session
-2. refresh rendered commands
-3. refresh rendered skills
-4. refresh `.dojo/context.md`
-5. launch the selected coding tool in the workspace root
-
-That means the AI tool always starts from current disk state instead of stale chat-only memory.
+| Command | What it really does |
+|---------|---------------------|
+| `dojo session new` | Define a new work item, switch branches, regenerate commands/context, and best-effort push session branches |
+| `dojo session resume <id>` | Restore a previously defined branch layout and make that session active again |
+| `dojo session none` | Return the workspace to baseline mode with no active session |
+| `dojo status` | Show actual workspace-vs-expected branch state |
+| `dojo session status` | Show detailed state for one session |
+| `dojo context reload` | Re-render commands and rebuild `.dojo/context.md` without launching a tool |
+| `dojo start` | Verify alignment, refresh runtime state, and launch the selected AI tool |
+| `dojo task status` | Show the active session task overview and actionable tasks |
 
 ## Quick start
 
@@ -155,6 +179,7 @@ dojo repo add --local ./existing-repo
 # Create or resume a session
 dojo session new
 dojo session resume <session-id>
+dojo session none
 
 # Refresh context manually when needed
 dojo context reload
@@ -174,6 +199,26 @@ echo 'source <(dojo completion zsh)' >> ~/.zshrc
 # Launch the AI tool after refreshing runtime state
 dojo start
 ```
+
+## What `dojo start` Guarantees
+
+`dojo start` is the normal entry point for day-to-day use.
+
+Before launching the tool it will:
+
+1. detect the active session or baseline mode
+2. verify the workspace branch layout is aligned
+3. refresh rendered commands
+4. refresh rendered skills
+5. regenerate `.dojo/context.md`
+6. launch the selected coding tool in the workspace root
+
+Important behavior:
+
+- dirty worktrees do **not** block `dojo start`
+- branch/layout drift **does** block `dojo start`
+
+That keeps the AI usable during active local work, while still preventing it from starting in the wrong workspace mode.
 
 ## Built-in starter commands
 
@@ -267,7 +312,7 @@ my-workspace/
 │           ├── tech-design/
 │           └── tasks/
 ├── .agents/commands/
-├── .agents/skill/
+├── .agents/skills/
 ├── .claude/commands/
 ├── .claude/skills/
 ├── .trae/commands/
@@ -312,4 +357,6 @@ Start with these:
 - [docs/template-protocol.md](docs/template-protocol.md) — template and artifact syntax
 - [docs/protocol-implementation-draft.md](docs/protocol-implementation-draft.md) — concrete config, types, and pseudocode
 - [docs/tech-design.md](docs/tech-design.md) — code-level architecture
+- [docs/session-workspace-state-prd.md](docs/session-workspace-state-prd.md) — product model for baseline/session workspace state
+- [docs/session-workspace-state-tech-design.md](docs/session-workspace-state-tech-design.md) — technical design for state control, switching, and status surfaces
 - [docs/test-plan.md](docs/test-plan.md) — verification standard
