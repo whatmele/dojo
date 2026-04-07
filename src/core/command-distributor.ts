@@ -13,7 +13,6 @@ import { readConfig } from './config.js';
 import {
   expandTemplateArtifactSyntax,
   getTemplateScope,
-  splitTemplateFrontmatter,
   validateTemplateContent,
 } from './protocol.js';
 
@@ -21,6 +20,7 @@ const MARK_SESSION_START = '<!-- DOJO_SESSION_ONLY -->';
 const MARK_SESSION_END = '<!-- /DOJO_SESSION_ONLY -->';
 const MARK_NOSESSION_START = '<!-- DOJO_NO_SESSION_ONLY -->';
 const MARK_NOSESSION_END = '<!-- /DOJO_NO_SESSION_ONLY -->';
+const NO_SESSION_PLACEHOLDER = 'baseline';
 
 function removeTaggedBlock(source: string, start: string, end: string): string {
   let s = source;
@@ -65,16 +65,6 @@ export function applyCommandSessionPlaceholders(
   return out;
 }
 
-function noSessionBannerForSessionBoundCommands(): string {
-  return '> **Dojo**: No active session. Run `dojo session new` first. The segment `no-active-session` in paths is a placeholder only.\n\n';
-}
-
-function prependAfterFrontmatter(content: string, prefix: string): string {
-  const parts = splitTemplateFrontmatter(content);
-  if (!parts.frontmatter) return prefix + content;
-  return `${parts.frontmatter}${prefix}${parts.body}`;
-}
-
 async function materializeAgentsCommands(
   root: string,
   sessionId: string | null,
@@ -85,6 +75,7 @@ async function materializeAgentsCommands(
   ensureDir(targetDir);
 
   const files = listFiles(sourceDir).filter(f => f.endsWith('.md'));
+  const expected = new Set<string>();
 
   for (const file of files) {
     const source = readText(path.join(sourceDir, file));
@@ -94,23 +85,24 @@ async function materializeAgentsCommands(
     }
 
     const scope = getTemplateScope(source);
-    let content = source;
     if (sessionId === null && scope === 'session') {
-      content = prependAfterFrontmatter(content, noSessionBannerForSessionBoundCommands());
-      content = applyCommandSessionPlaceholders(content, null, 'no-active-session');
-      content = await expandTemplateArtifactSyntax(content, root, config, {
-        sessionId: null,
-        noSessionPlaceholder: 'no-active-session',
-      });
-    } else {
-      content = applyCommandSessionPlaceholders(content, sessionId, sessionId === null ? 'no-active-session' : '');
-      content = await expandTemplateArtifactSyntax(content, root, config, {
-        sessionId,
-        noSessionPlaceholder: sessionId === null ? 'no-active-session' : '',
-      });
+      continue;
     }
 
+    let content = source;
+    content = applyCommandSessionPlaceholders(content, sessionId, sessionId === null ? NO_SESSION_PLACEHOLDER : '');
+    content = await expandTemplateArtifactSyntax(content, root, config, {
+      sessionId,
+      noSessionPlaceholder: sessionId === null ? NO_SESSION_PLACEHOLDER : '',
+    });
+
     writeText(path.join(targetDir, file), content);
+    expected.add(file);
+  }
+
+  for (const file of listFiles(targetDir).filter(f => f.startsWith('dojo-') && f.endsWith('.md'))) {
+    if (expected.has(file)) continue;
+    removePathIfExists(path.join(targetDir, file));
   }
 }
 
@@ -145,6 +137,38 @@ function migrateLegacyAgentSkillsDir(agentSkillDir: string, agentsSkillsDir: str
   }
   if (resolvedLink === resolvedAgents) {
     fs.unlinkSync(agentSkillDir);
+  }
+}
+
+function removePathIfExists(targetPath: string): void {
+  if (!fs.existsSync(targetPath)) return;
+  const stat = fs.lstatSync(targetPath);
+  if (stat.isDirectory() && !stat.isSymbolicLink()) {
+    fs.rmSync(targetPath, { recursive: true, force: true });
+    return;
+  }
+  fs.unlinkSync(targetPath);
+}
+
+function listSkillIds(dirPath: string): string[] {
+  if (!fs.existsSync(dirPath)) return [];
+  return fs.readdirSync(dirPath, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((id) => fs.existsSync(path.join(dirPath, id, 'SKILL.md')))
+    .sort();
+}
+
+function isManagedSkillLink(skillFile: string, agentsSkillsDir: string): boolean {
+  if (!fs.existsSync(skillFile)) return false;
+  const stat = fs.lstatSync(skillFile);
+  if (!stat.isSymbolicLink()) return false;
+  try {
+    const resolvedFile = fs.realpathSync(skillFile);
+    const resolvedAgentsSkillsDir = fs.realpathSync(agentsSkillsDir);
+    return resolvedFile.startsWith(`${resolvedAgentsSkillsDir}${path.sep}`);
+  } catch {
+    return false;
   }
 }
 
@@ -186,32 +210,16 @@ function materializeAgentsSkills(root: string): void {
   const targetDir = path.join(root, AGENTS_SKILLS_DIR);
   ensureDir(targetDir);
 
-  const ids = fs.existsSync(sourceDir)
-    ? fs.readdirSync(sourceDir, { withFileTypes: true })
-      .filter(entry => entry.isDirectory())
-      .map(entry => entry.name)
-      .sort()
-    : [];
+  const ids = listSkillIds(sourceDir);
 
-  const expected = new Set<string>();
   for (const id of ids) {
     const skillFile = path.join(sourceDir, id, 'SKILL.md');
-    if (!fs.existsSync(skillFile)) continue;
-    const targetFile = path.join(targetDir, `${id}.md`);
+    const legacyFlatFile = path.join(targetDir, `${id}.md`);
+    removePathIfExists(legacyFlatFile);
+    const targetFile = path.join(targetDir, id, 'SKILL.md');
     writeText(targetFile, readText(skillFile));
-    expected.add(`${id}.md`);
   }
 
-  const existing = fs.existsSync(targetDir) ? listFiles(targetDir) : [];
-  for (const file of existing) {
-    if (!file.endsWith('.md')) continue;
-    if (expected.has(file)) continue;
-    try {
-      fs.unlinkSync(path.join(targetDir, file));
-    } catch {
-      /* ignore */
-    }
-  }
 }
 
 export function syncAgentDojoSkillFileSymlinks(root: string, agents: AgentTool[]): void {
@@ -220,7 +228,8 @@ export function syncAgentDojoSkillFileSymlinks(root: string, agents: AgentTool[]
     ensureDir(agentsSkillsDir);
   }
 
-  const skillFiles = listFiles(agentsSkillsDir).filter(f => f.endsWith('.md'));
+  const skillIds = listSkillIds(agentsSkillsDir);
+  const expected = new Set<string>(skillIds);
 
   for (const agent of agents) {
     const relAgentDir = AGENT_SKILL_DIRS[agent];
@@ -230,19 +239,27 @@ export function syncAgentDojoSkillFileSymlinks(root: string, agents: AgentTool[]
     migrateLegacyAgentSkillsDir(agentSkillDir, agentsSkillsDir);
     ensureDir(agentSkillDir);
 
-    const existing = fs.existsSync(agentSkillDir) ? listFiles(agentSkillDir) : [];
-    for (const name of existing) {
-      if (!name.endsWith('.md')) continue;
-      if (skillFiles.includes(name)) continue;
-      try {
-        fs.unlinkSync(path.join(agentSkillDir, name));
-      } catch {
-        /* ignore */
+    if (fs.existsSync(agentSkillDir)) {
+      for (const entry of fs.readdirSync(agentSkillDir, { withFileTypes: true })) {
+        if (entry.name.endsWith('.md')) {
+          removePathIfExists(path.join(agentSkillDir, entry.name));
+          continue;
+        }
+        if (expected.has(entry.name)) continue;
+        const skillFile = path.join(agentSkillDir, entry.name, 'SKILL.md');
+        if (isManagedSkillLink(skillFile, agentsSkillsDir)) {
+          removePathIfExists(path.join(agentSkillDir, entry.name));
+        }
       }
     }
 
-    for (const file of skillFiles) {
-      createFileSymlink(path.join(agentsSkillsDir, file), path.join(agentSkillDir, file));
+    for (const skillId of skillIds) {
+      const targetSkillDir = path.join(agentSkillDir, skillId);
+      ensureDir(targetSkillDir);
+      createFileSymlink(
+        path.join(agentsSkillsDir, skillId, 'SKILL.md'),
+        path.join(targetSkillDir, 'SKILL.md'),
+      );
     }
   }
 }

@@ -120,7 +120,7 @@ describe('distributeCommands', () => {
     expect(fs.readFileSync(linkFile, 'utf-8')).toContain('test content');
   });
 
-  it('creates per-file symlinks for materialized skills under .claude/skills', async () => {
+  it('creates per-skill SKILL.md symlinks under .claude/skills', async () => {
     const skillDir = path.join(tmpDir, '.dojo', 'skills', 'dojo-template-authoring');
     fs.mkdirSync(skillDir, { recursive: true });
     fs.writeFileSync(
@@ -137,7 +137,10 @@ describe('distributeCommands', () => {
 
     await distributeCommands(tmpDir, 'sess-1', ['claude-code']);
 
-    const skillFile = path.join(tmpDir, '.claude', 'skills', 'dojo-template-authoring.md');
+    const agentsSkillFile = path.join(tmpDir, '.agents', 'skills', 'dojo-template-authoring', 'SKILL.md');
+    expect(fs.existsSync(agentsSkillFile)).toBe(true);
+
+    const skillFile = path.join(tmpDir, '.claude', 'skills', 'dojo-template-authoring', 'SKILL.md');
     expect(fs.existsSync(skillFile)).toBe(true);
     expect(fs.lstatSync(skillFile).isSymbolicLink()).toBe(true);
     expect(fs.readFileSync(skillFile, 'utf-8')).toContain('Dojo Template Authoring');
@@ -161,6 +164,23 @@ describe('distributeCommands', () => {
     expect(fs.readFileSync(linkFile, 'utf-8')).toContain('s1');
   });
 
+  it('migrates legacy flat skill files to per-skill SKILL.md symlinks', async () => {
+    const skillDir = path.join(tmpDir, '.dojo', 'skills', 'dojo-template-authoring');
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '# Skill\n');
+
+    const legacySkillDir = path.join(tmpDir, '.claude', 'skills');
+    fs.mkdirSync(legacySkillDir, { recursive: true });
+    fs.writeFileSync(path.join(legacySkillDir, 'dojo-template-authoring.md'), 'legacy');
+
+    await distributeCommands(tmpDir, 'sess-1', ['claude-code']);
+
+    expect(fs.existsSync(path.join(legacySkillDir, 'dojo-template-authoring.md'))).toBe(false);
+    const linkFile = path.join(legacySkillDir, 'dojo-template-authoring', 'SKILL.md');
+    expect(fs.existsSync(linkFile)).toBe(true);
+    expect(fs.lstatSync(linkFile).isSymbolicLink()).toBe(true);
+  });
+
   it('updates existing rendered files on re-run', async () => {
     fs.writeFileSync(
       path.join(tmpDir, '.dojo', 'commands', 'dojo-cmd.md'),
@@ -177,21 +197,7 @@ describe('distributeCommands', () => {
     expect(result).not.toContain('first');
   });
 
-  it('with null session, strips SESSION_ONLY in dojo-gen-doc.md', async () => {
-    fs.writeFileSync(
-      path.join(tmpDir, '.dojo', 'commands', 'dojo-gen-doc.md'),
-      'A\n<!-- DOJO_SESSION_ONLY -->SESSION\n<!-- /DOJO_SESSION_ONLY -->\nB',
-    );
-
-    await distributeCommands(tmpDir, null, ['codex']);
-
-    const result = fs.readFileSync(path.join(tmpDir, '.agents', 'commands', 'dojo-gen-doc.md'), 'utf-8');
-    expect(result).not.toContain('SESSION');
-    expect(result).toContain('A');
-    expect(result).toContain('B');
-  });
-
-  it('with null session, prepends banner for session-bound commands and uses no-active-session placeholders', async () => {
+  it('with null session, skips session-bound commands entirely', async () => {
     fs.writeFileSync(
       path.join(tmpDir, '.dojo', 'commands', 'dojo-prd.md'),
       [
@@ -207,14 +213,7 @@ describe('distributeCommands', () => {
 
     await distributeCommands(tmpDir, null, ['codex']);
 
-    const result = fs.readFileSync(path.join(tmpDir, '.agents', 'commands', 'dojo-prd.md'), 'utf-8');
-    expect(result.startsWith('---\n')).toBe(true);
-    expect(result).toContain('description: PRD command');
-    const frontmatterEnd = result.indexOf('\n---\n');
-    expect(frontmatterEnd).toBeGreaterThanOrEqual(0);
-    expect(result.indexOf('No active session')).toBeGreaterThan(frontmatterEnd);
-    expect(result).toContain('No active session');
-    expect(result).toContain('.dojo/sessions/no-active-session/custom-doc');
+    expect(fs.existsSync(path.join(tmpDir, '.agents', 'commands', 'dojo-prd.md'))).toBe(false);
   });
 
   it('uses scope metadata to skip the no-session banner for mixed templates', async () => {
@@ -236,7 +235,58 @@ describe('distributeCommands', () => {
     const result = fs.readFileSync(path.join(tmpDir, '.agents', 'commands', 'dojo-optional.md'), 'utf-8');
     expect(result.startsWith('---\n')).toBe(true);
     expect(result).not.toContain('No active session');
-    expect(result).toContain('.dojo/sessions/no-active-session/custom-doc');
+    expect(result).toContain('.dojo/sessions/baseline/custom-doc');
+  });
+
+  it('removes stale rendered session-bound files when switching back to no-session mode', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.dojo', 'commands', 'dojo-prd.md'),
+      [
+        '---',
+        'description: PRD command',
+        'argument-hint: [topic]',
+        'scope: session',
+        '---',
+        '',
+        'path ${artifact_dir:custom-doc}',
+      ].join('\n'),
+    );
+
+    await distributeCommands(tmpDir, 'sess-live', ['codex']);
+    expect(fs.existsSync(path.join(tmpDir, '.agents', 'commands', 'dojo-prd.md'))).toBe(true);
+
+    await distributeCommands(tmpDir, null, ['codex']);
+    expect(fs.existsSync(path.join(tmpDir, '.agents', 'commands', 'dojo-prd.md'))).toBe(false);
+  });
+
+  it('does not delete non-dojo command files from .agents/commands', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.dojo', 'commands', 'dojo-prd.md'),
+      'Session: ${session_id}',
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, '.agents', 'commands', 'custom-team-command.md'),
+      'keep me',
+    );
+
+    await distributeCommands(tmpDir, null, ['codex']);
+
+    expect(fs.readFileSync(path.join(tmpDir, '.agents', 'commands', 'custom-team-command.md'), 'utf-8')).toBe('keep me');
+  });
+
+  it('does not delete non-dojo skills from .agents/skills', async () => {
+    const skillDir = path.join(tmpDir, '.dojo', 'skills', 'dojo-template-authoring');
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '# Dojo skill\n');
+
+    const customSkillDir = path.join(tmpDir, '.agents', 'skills', 'team-skill');
+    fs.mkdirSync(customSkillDir, { recursive: true });
+    fs.writeFileSync(path.join(customSkillDir, 'SKILL.md'), '# Team skill\n');
+
+    await distributeCommands(tmpDir, 'sess-1', ['claude-code']);
+
+    expect(fs.readFileSync(path.join(customSkillDir, 'SKILL.md'), 'utf-8')).toBe('# Team skill\n');
+    expect(fs.existsSync(path.join(tmpDir, '.agents', 'skills', 'dojo-template-authoring', 'SKILL.md'))).toBe(true);
   });
 
   it('renders artifact placeholders during distribution', async () => {

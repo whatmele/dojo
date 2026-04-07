@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Command } from 'commander';
+import { simpleGit } from 'simple-git';
 import { writeConfig } from '../../src/core/config.js';
 import { writeSessionState, writeWorkspaceState } from '../../src/core/state.js';
 import { distributeCommands } from '../../src/core/command-distributor.js';
@@ -28,13 +29,18 @@ function writeArtifact(root: string, fileName: string, source: string): void {
   writeText(path.join(root, '.dojo', 'artifacts', fileName), source);
 }
 
-function setupWorkspace(root: string, config: WorkspaceConfig): void {
+async function setupWorkspace(root: string, config: WorkspaceConfig): Promise<void> {
   ensureDir(path.join(root, '.dojo', 'commands'));
   ensureDir(path.join(root, '.dojo', 'artifacts'));
   ensureDir(path.join(root, '.dojo', 'sessions'));
   ensureDir(path.join(root, '.agents', 'commands'));
   writeConfig(root, config);
   writeWorkspaceState(root, { active_session: null });
+  const git = simpleGit(root);
+  await git.init();
+  fs.writeFileSync(path.join(root, '.gitignore'), '.dojo/context.md\n');
+  await git.add('.');
+  await git.commit('init workspace');
 }
 
 describe('protocol runtime end-to-end', () => {
@@ -61,7 +67,7 @@ describe('protocol runtime end-to-end', () => {
         artifacts: ['product-requirement', 'risk-summary', 'dev-plan'],
       },
     };
-    setupWorkspace(workspaceRoot, config);
+    await setupWorkspace(workspaceRoot, config);
 
     writeArtifact(
       workspaceRoot,
@@ -151,7 +157,7 @@ describe('protocol runtime end-to-end', () => {
       agent_commands: { codex: 'mock-codex' },
       repos: [],
     };
-    setupWorkspace(workspaceRoot, config);
+    await setupWorkspace(workspaceRoot, config);
 
     writeText(
       path.join(workspaceRoot, '.dojo', 'commands', 'dojo-prd.md'),
@@ -169,8 +175,11 @@ describe('protocol runtime end-to-end', () => {
     writeSessionState(workspaceRoot, session.id, session);
     writeWorkspaceState(workspaceRoot, { active_session: session.id });
 
+    const workspaceGit = simpleGit(workspaceRoot);
+    await workspaceGit.checkoutLocalBranch('feature/start-session');
     ensureDir(path.join(workspaceRoot, '.dojo', 'sessions', session.id, 'product-requirements'));
     writeText(path.join(workspaceRoot, '.dojo', 'sessions', session.id, 'product-requirements', 'prd.md'), '# Start PRD');
+    writeText(path.join(workspaceRoot, 'dirty-but-allowed.txt'), 'local changes are fine for start');
 
     spawnMock.mockImplementation((cmd: string) => {
       const contextMd = readText(path.join(workspaceRoot, '.dojo', 'context.md'));
@@ -201,7 +210,7 @@ describe('protocol runtime end-to-end', () => {
       agents: ['codex'],
       repos: [],
     };
-    setupWorkspace(workspaceRoot, config);
+    await setupWorkspace(workspaceRoot, config);
 
     const sessionA: SessionState = {
       id: 'session-a',
@@ -255,7 +264,7 @@ describe('protocol runtime end-to-end', () => {
       agents: ['codex'],
       repos: [],
     };
-    setupWorkspace(workspaceRoot, config);
+    await setupWorkspace(workspaceRoot, config);
 
     const session: SessionState = {
       id: 'live-runtime',

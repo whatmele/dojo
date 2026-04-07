@@ -32,6 +32,10 @@ export function getTaskDir(root: string, sessionId: string, taskName: string): s
   return path.join(root, DOJO_DIR, 'sessions', sessionId, 'tasks', taskName);
 }
 
+export function resolveRepoPath(root: string, repoPath: string): string {
+  return path.isAbsolute(repoPath) ? repoPath : path.join(root, repoPath);
+}
+
 export interface CleanCheckResult {
   clean: boolean;
   dirtyRepos: string[];
@@ -39,7 +43,7 @@ export interface CleanCheckResult {
 
 export async function checkWorkspaceClean(
   root: string,
-  session: SessionState | null,
+  _session: SessionState | null,
   config: WorkspaceConfig,
 ): Promise<CleanCheckResult> {
   const dirtyRepos: string[] = [];
@@ -48,19 +52,15 @@ export async function checkWorkspaceClean(
     dirtyRepos.push('workspace (root)');
   }
 
-  if (session) {
-    for (const repoName of Object.keys(session.repo_branches)) {
-      const repo = config.repos.find(r => r.name === repoName);
-      if (!repo) continue;
-      const repoPath = path.join(root, repo.path);
-      if (!fileExists(repoPath)) continue;
-      try {
-        if (await isDirty(repoPath)) {
-          dirtyRepos.push(repoName);
-        }
-      } catch {
-        // repo not a git dir, skip
+  for (const repo of config.repos) {
+    const repoPath = resolveRepoPath(root, repo.path);
+    if (!fileExists(repoPath)) continue;
+    try {
+      if (await isDirty(repoPath)) {
+        dirtyRepos.push(repo.name);
       }
+    } catch {
+      // repo not a git dir, skip
     }
   }
 

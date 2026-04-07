@@ -104,21 +104,25 @@ describe('built-in templates and artifacts', () => {
 
     await distributeCommands(tmpDir, null, ['claude-code']);
 
-    const sessionBound = fs.readFileSync(path.join(tmpDir, '.agents', 'commands', 'dojo-prd.md'), 'utf-8');
-    expect(getTemplateScope(sessionBound)).toBe('session');
-    expect(sessionBound.startsWith('---\n')).toBe(true);
-    expect(sessionBound).toContain('argument-hint: [feature / user problem / goal]');
-    expect(sessionBound).toContain('No active session');
-    expect(sessionBound).toContain('.dojo/sessions/no-active-session/product-requirements');
-    expect(sessionBound).not.toContain('<dojo_write_block');
+    expect(fs.existsSync(path.join(tmpDir, '.agents', 'commands', 'dojo-prd.md'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, '.agents', 'commands', 'dojo-tech-design.md'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, '.agents', 'commands', 'dojo-task-decompose.md'))).toBe(false);
 
     const optional = fs.readFileSync(path.join(tmpDir, '.agents', 'commands', 'dojo-gen-doc.md'), 'utf-8');
     expect(getTemplateScope(optional)).toBe('mixed');
     expect(optional.startsWith('---\n')).toBe(true);
     expect(optional).toContain('description: Generate or update documentation from the workspace or active session.');
-    expect(optional).not.toContain('Run `dojo session new` first.');
     expect(optional).not.toContain('<dojo_read_block');
     expect(optional).not.toContain('<dojo_write_block');
     expect(optional).toContain('docs');
+  });
+
+  it('keeps dojo-task-decompose focused on task artifacts and manifest output', async () => {
+    const content = fs.readFileSync(path.join(builtInCommandsDir, 'dojo-task-decompose.md'), 'utf-8');
+    expect(content).toContain('<dojo_write_block artifact="tasks" />');
+    expect(content).toContain('manifest.json');
+    expect(content).toContain('task-implementation.md');
+    expect(content).toContain('task-acceptance.md');
+    expect(content).toContain('Only create files under the session `tasks/` tree');
   });
 });

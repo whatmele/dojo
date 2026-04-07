@@ -1,0 +1,127 @@
+#!/usr/bin/expect -f
+set timeout 90
+
+set step [lindex $argv 0]
+set root_dir $env(ROOT_DIR)
+set smoke_dir $env(SMOKE_DIR)
+set workspace_dir $env(WORKSPACE_DIR)
+set transcripts_dir $env(TRANSCRIPTS_DIR)
+set repo_a_dir $env(REPO_A_DIR)
+set repo_b_dir $env(REPO_B_DIR)
+set repo_c_dir $env(REPO_C_DIR)
+set dojo_bin [file join $root_dir dist bin dojo.js]
+set env(NO_COLOR) 1
+
+proc wait_for_prompt {pattern} {
+  expect {
+    -re $pattern { return }
+    timeout { puts stderr "Timed out waiting for prompt: $pattern"; exit 1 }
+    eof { puts stderr "Process exited before prompt: $pattern"; exit 1 }
+  }
+}
+
+proc start_log {name} {
+  global transcripts_dir
+  catch {log_file}
+  log_file -noappend [file join $transcripts_dir $name]
+}
+
+proc finish_step {} {
+  catch {log_file}
+}
+
+proc choose_create_branch {label target_branch} {
+  wait_for_prompt "$label: branch mode"
+  send "\r"
+  wait_for_prompt "$label: base branch"
+  send "\r"
+  wait_for_prompt "$label: target branch"
+  send "\r"
+  wait_for_prompt "${label}: target branch \\(type to search, Tab to complete\\)"
+  send -- "$target_branch"
+  wait_for_prompt $target_branch
+  after 150
+  send "\r"
+  wait_for_prompt "$label: confirm branch setup"
+  send "\r"
+}
+
+if {$step eq "create"} {
+  start_log "01-create.log"
+  spawn bash -lc "cd \"$smoke_dir\" && node \"$dojo_bin\" create"
+  wait_for_prompt {Workspace name:}
+  send "multi-workspace\r"
+  wait_for_prompt {Workspace description:}
+  send "Multi repo tty smoke workspace\r"
+  wait_for_prompt {Workspace baseline branch}
+  send "\r"
+  wait_for_prompt {AI tools to enable:}
+  send " \r"
+  wait_for_prompt {Configure custom CLI commands for the selected tools\?}
+  send "\r"
+  wait_for_prompt {Add a Git repository now\?}
+  send "n\r"
+  expect eof
+  finish_step
+  exit 0
+}
+
+if {$step eq "session-new-a"} {
+  start_log "02-session-new-a.log"
+  spawn bash -lc "cd \"$workspace_dir\" && node \"$dojo_bin\" session new"
+  wait_for_prompt {Session ID \(kebab-case\):}
+  send "session-a\r"
+  wait_for_prompt {Session description:}
+  send "TTY session a\r"
+  wait_for_prompt {External link \(optional\):}
+  send "\r"
+
+  choose_create_branch {Workspace root} {feature/session-a-root}
+
+  wait_for_prompt {Repositories in this session:}
+  send " \033\[B \r"
+
+  choose_create_branch {Repo repo-a} {feature/session-a-repo-a}
+  choose_create_branch {Repo repo-b} {feature/session-a-repo-b}
+
+  wait_for_prompt {Session "session-a" created and active\.}
+  expect eof
+  finish_step
+  exit 0
+}
+
+if {$step eq "session-new-b"} {
+  start_log "03-session-new-b.log"
+  spawn bash -lc "cd \"$workspace_dir\" && node \"$dojo_bin\" session new"
+  wait_for_prompt {Session ID \(kebab-case\):}
+  send "session-b\r"
+  wait_for_prompt {Session description:}
+  send "TTY session b\r"
+  wait_for_prompt {External link \(optional\):}
+  send "\r"
+
+  choose_create_branch {Workspace root} {feature/session-b-root}
+
+  wait_for_prompt {Repositories in this session:}
+  send "\033\[B \033\[B \r"
+
+  choose_create_branch {Repo repo-b} {feature/session-b-repo-b}
+  choose_create_branch {Repo repo-c} {feature/session-b-repo-c}
+
+  wait_for_prompt {Session "session-b" created and active\.}
+  expect eof
+  finish_step
+  exit 0
+}
+
+if {$step eq "session-resume-a"} {
+  start_log "04-session-resume-a.log"
+  spawn bash -lc "cd \"$workspace_dir\" && node \"$dojo_bin\" session resume session-a"
+  wait_for_prompt {Session "session-a" resumed and active\.}
+  expect eof
+  finish_step
+  exit 0
+}
+
+puts stderr "Unknown smoke step: $step"
+exit 1

@@ -8,6 +8,7 @@ import { registerStartCommand } from '../../src/commands/start.js';
 import { registerTemplateCommand } from '../../src/commands/template.js';
 import { registerArtifactCommand } from '../../src/commands/artifact.js';
 import { registerCompletionCommand, renderZshCompletion, renderBashCompletion } from '../../src/commands/completion.js';
+import { registerTaskCommand } from '../../src/commands/task.js';
 
 function buildProgram(): Command {
   const program = new Command();
@@ -20,6 +21,7 @@ function buildProgram(): Command {
   registerTemplateCommand(program);
   registerArtifactCommand(program);
   registerCompletionCommand(program);
+  registerTaskCommand(program);
   return program;
 }
 
@@ -30,7 +32,9 @@ describe('shell completion', () => {
     expect(script).toContain('#compdef dojo');
     expect(script).toContain("'session:Development session management ([options] [command])'");
     expect(script).toContain("'new:Create a new dev session ([options])'");
+    expect(script).toContain("'none:Return the workspace to no-session baseline mode ([options])'");
     expect(script).toContain("'template:Template management ([options] [command])'");
+    expect(script).toContain("'task:Task overview and execution status ([options] [command])'");
     expect(script).toContain("'lint:Validate Dojo command templates ([options] [target])'");
   });
 
@@ -42,5 +46,6 @@ describe('shell completion', () => {
     expect(script).toContain('session');
     expect(script).toContain('create');
     expect(script).toContain('lint');
+    expect(script).toContain('task');
   });
 });

@@ -98,7 +98,7 @@ Dojo is designed as a closed loop:
 2. create or resume a session
 3. switch the workspace root branch and repo branches together
 4. materialize templates into `.agents/commands/`
-5. materialize skills into `.agents/skill/` and symlink supported tool skill directories
+5. materialize skills into `.agents/skills/<skill-id>/SKILL.md` and symlink supported tool skill directories
 6. run a built-in or custom template
 7. write outputs into artifact plugin directories
 8. regenerate `.dojo/context.md`
@@ -198,8 +198,8 @@ Dojo ships a real authoring skill asset:
 
 - source in this repo: [`src/skills/dojo-template-authoring/SKILL.md`](src/skills/dojo-template-authoring/SKILL.md)
 - installed into a workspace by `dojo init`: `.dojo/skills/dojo-template-authoring/SKILL.md`
-- materialized canonical copy: `.agents/skill/dojo-template-authoring.md`
-- supported tool symlink example: `.claude/skills/dojo-template-authoring.md`
+- materialized canonical copy: `.agents/skills/dojo-template-authoring/SKILL.md`
+- supported tool symlink example: `.claude/skills/dojo-template-authoring/SKILL.md`
 
 An AI should read that skill when it needs to:
 

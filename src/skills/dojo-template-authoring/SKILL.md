@@ -136,7 +136,7 @@ Artifact plugins can be written directly in TypeScript.
 
 ## Skill sync
 
-Dojo materializes workspace skills into `.agents/skill/` and symlinks supported tool skill directories such as `.claude/skills/`.
+Dojo materializes workspace skills into `.agents/skills/<slug>/SKILL.md` and symlinks supported tool skill directories such as `.claude/skills/<slug>/SKILL.md`.
 
 The TypeScript path is preferred because it makes the plugin contract and helper methods visible while you author.
 

@@ -12,6 +12,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit",
+    "smoke:tty": "npm run smoke:tty:main && npm run smoke:tty:multi && npm run smoke:tty:failures",
+    "smoke:tty:main": "bash scripts/tty-smoke.sh",
+    "smoke:tty:multi": "bash scripts/tty-smoke-multi.sh",
+    "smoke:tty:failures": "bash scripts/tty-smoke-failures.sh",
+    "smoke:interactive": "bash scripts/interactive-smoke.sh",
     "prepare": "npm run build"
   },
   "keywords": [

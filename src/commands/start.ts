@@ -6,8 +6,8 @@ import { readConfig } from '../core/config.js';
 import { getActiveSession } from '../core/state.js';
 import { generateContext } from '../core/context-generator.js';
 import { distributeCommands } from '../core/command-distributor.js';
-import { writeText } from '../utils/fs.js';
-import { DOJO_DIR } from '../types.js';
+import { reconcileWorkspaceState } from '../core/session-reconciler.js';
+import { normalizeSessionState } from '../core/target-state.js';
 import { log, printBanner } from '../utils/logger.js';
 import type { AgentTool } from '../types.js';
 
@@ -30,14 +30,33 @@ export function registerStartCommand(program: Command): void {
       printBanner();
       console.log();
 
+      const normalized = session ? normalizeSessionState(session, config) : null;
+      const reconciliation = await reconcileWorkspaceState(root, config, normalized);
+      const nonDirtyBlockingIssues = reconciliation.blocking_issues
+        .filter((issue) => !issue.endsWith('uncommitted changes') && !issue.endsWith(': dirty'));
+      const hasBranchDrift = [reconciliation.root, ...reconciliation.repos]
+        .some((item) => item.status === 'branch-mismatch' || item.status === 'missing-branch');
+
+      if (nonDirtyBlockingIssues.length > 0 || hasBranchDrift) {
+        log.error(`Workspace is not aligned for ${normalized ? `session "${normalized.id}"` : 'no-session'} mode.`);
+        for (const issue of nonDirtyBlockingIssues) {
+          log.error(`  - ${issue}`);
+        }
+        if (hasBranchDrift) {
+          log.error('  - branch layout does not match the expected workspace mode');
+        }
+        log.info(normalized ? 'Run `dojo session status` to inspect and fix the workspace.' : 'Run `dojo status` to inspect and fix the workspace.');
+        process.exit(1);
+      }
+
       log.step('Refreshing context...');
       if (session) {
-        await distributeCommands(root, session.id, config.agents);
-        await generateContext(root, session, config);
+        await distributeCommands(root, normalized!.id, config.agents);
+        await generateContext(root, normalized, config);
       } else {
         await distributeCommands(root, null, config.agents);
-        writeText(path.join(root, DOJO_DIR, 'context.md'), '');
-        log.dim('  No active session — no-session command stubs synced; context.md cleared.');
+        await generateContext(root, null, config);
+        log.dim('  No active session — baseline commands synced; baseline context refreshed.');
       }
 
       const targetTool = (tool ?? config.agents[0]) as AgentTool;

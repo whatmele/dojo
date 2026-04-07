@@ -3,6 +3,70 @@ import { DOJO_DIR } from '../types.js';
 import type { WorkspaceState, SessionState, TaskState, TaskManifest } from '../types.js';
 import { readJSON, writeJSON, fileExists, listDirs } from '../utils/fs.js';
 
+function normalizeTaskManifest(raw: unknown): TaskManifest | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const candidate = raw as {
+    tasks?: Array<{
+      id?: unknown;
+      name?: unknown;
+      title?: unknown;
+      description?: unknown;
+      depends_on?: unknown;
+      dependencies?: unknown;
+    }>;
+  };
+
+  if (!Array.isArray(candidate.tasks)) {
+    return null;
+  }
+
+  const idToName = new Map<string, string>();
+  for (const task of candidate.tasks) {
+    const id = typeof task.id === 'string' ? task.id.trim() : '';
+    const name = typeof task.name === 'string' ? task.name.trim() : '';
+    if (id && name) {
+      idToName.set(id, name);
+    }
+  }
+
+  const tasks = candidate.tasks
+    .map((task) => {
+      const name = typeof task.name === 'string' ? task.name.trim() : '';
+      if (!name) return null;
+
+      const id = typeof task.id === 'string' ? task.id.trim() : '';
+      const descriptionSource = typeof task.description === 'string' && task.description.trim()
+        ? task.description
+        : typeof task.title === 'string'
+          ? task.title
+          : '';
+
+      const rawDependsOn = Array.isArray(task.depends_on)
+        ? task.depends_on
+        : Array.isArray(task.dependencies)
+          ? task.dependencies
+          : [];
+
+      const depends_on = rawDependsOn
+        .map((value) => typeof value === 'string' ? value.trim() : '')
+        .filter(Boolean)
+        .map((value) => idToName.get(value) ?? value);
+
+      return {
+        ...(id ? { id } : {}),
+        name,
+        description: descriptionSource.trim() || '-',
+        depends_on,
+      };
+    })
+    .filter((task): task is TaskManifest['tasks'][number] => Boolean(task));
+
+  return { tasks };
+}
+
 function workspaceStatePath(root: string): string {
   return path.join(root, DOJO_DIR, 'state.json');
 }
@@ -63,7 +127,7 @@ export function readTaskManifest(root: string, sessionId: string): TaskManifest 
   const p = taskManifestPath(root, sessionId);
   if (!fileExists(p)) return null;
   try {
-    return readJSON<TaskManifest>(p);
+    return normalizeTaskManifest(readJSON<unknown>(p));
   } catch {
     return null;
   }

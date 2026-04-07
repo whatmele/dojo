@@ -5,8 +5,6 @@ import { readConfig } from '../core/config.js';
 import { getActiveSession } from '../core/state.js';
 import { generateContext } from '../core/context-generator.js';
 import { distributeCommands } from '../core/command-distributor.js';
-import { writeText } from '../utils/fs.js';
-import { DOJO_DIR } from '../types.js';
 import { log } from '../utils/logger.js';
 
 export function registerContextCommand(program: Command): void {
@@ -28,10 +26,10 @@ export function registerContextCommand(program: Command): void {
         await generateContext(root, session, config);
         log.success('Context and command stubs refreshed.');
       } else {
-        log.step('No active session — refreshing no-session command stubs and clearing context.md...');
+        log.step('No active session — refreshing baseline commands and rebuilding baseline context...');
         await distributeCommands(root, null, config.agents);
-        writeText(path.join(root, DOJO_DIR, 'context.md'), '');
-        log.success('Command stubs refreshed; context.md cleared.');
+        await generateContext(root, null, config);
+        log.success('Baseline commands refreshed; baseline context updated.');
       }
     });
 }

@@ -36,7 +36,7 @@ This workspace follows four Dojo concepts:
 - Read `@.dojo/context.md` when it exists.
 - If there is no active session, create or resume one first.
 - Dojo syncs rendered commands into `.agents/commands/` and tool directories such as `.claude/commands/`.
-- Dojo syncs installed skills into `.agents/skill/` and supported tool skill directories such as `.claude/skills/`.
+- Dojo syncs installed skills into `.agents/skills/<slug>/SKILL.md` and supported tool skill directories such as `.claude/skills/<slug>/SKILL.md`.
 
 ## Recommended Starter Flow
 

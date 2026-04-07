@@ -10,6 +10,8 @@ import { registerStartCommand } from '../src/commands/start.js';
 import { registerTemplateCommand } from '../src/commands/template.js';
 import { registerArtifactCommand } from '../src/commands/artifact.js';
 import { registerCompletionCommand } from '../src/commands/completion.js';
+import { registerStatusCommand } from '../src/commands/status.js';
+import { registerTaskCommand } from '../src/commands/task.js';
 
 const program = new Command();
 
@@ -35,6 +37,8 @@ registerStartCommand(program);
 registerTemplateCommand(program);
 registerArtifactCommand(program);
 registerCompletionCommand(program);
+registerStatusCommand(program);
+registerTaskCommand(program);
 
 if (process.argv.length <= 2) {
   printBanner();

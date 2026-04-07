@@ -6,13 +6,21 @@ import type { WorkspaceConfig, WorkspaceState, AgentTool, RepoType, RepoConfig }
 import { DOJO_DIR, AGENTS_SKILLS_DIR } from '../types.js';
 import { writeConfig, addRepo } from '../core/config.js';
 import { writeWorkspaceState } from '../core/state.js';
-import { initRepo, addAndCommit, cloneRepo } from '../core/git.js';
+import {
+  alignRepoToExistingBranch,
+  initRepo,
+  addAndCommit,
+  cloneRepo,
+  getCurrentBranch,
+  stagePathsAndCommit,
+} from '../core/git.js';
 import { distributeCommands } from '../core/command-distributor.js';
 import { isDojoWorkspace } from '../core/workspace.js';
 import { TOOL_COMMANDS } from './start.js';
 import { ensureDir, writeText, readText, fileExists } from '../utils/fs.js';
 import { log, printBanner } from '../utils/logger.js';
 import { resolveBuiltInArtifactsDir, resolveBuiltInSkillsDir, resolveBuiltInStarterDir } from '../core/builtins.js';
+import { promptBranchName } from './branch-prompts.js';
 
 const AGENT_CHOICES: { name: string; value: AgentTool }[] = [
   { name: 'Claude Code', value: 'claude-code' },
@@ -91,6 +99,7 @@ async function applyInit(
   root: string,
   name: string,
   description: string,
+  defaultBranch: string,
   agents: AgentTool[],
   agent_commands?: Partial<Record<AgentTool, string>>,
 ): Promise<void> {
@@ -117,6 +126,17 @@ async function applyInit(
     repos: [],
     context: {
       artifacts: ['product-requirement', 'research', 'tech-design', 'tasks', 'workspace-doc'],
+    },
+    runtime: {
+      workspace_root: {
+        default_branch: defaultBranch,
+      },
+      switch_guard: {
+        clean_policy: 'all-registered',
+      },
+      remote: {
+        auto_push_on_session_create: true,
+      },
     },
   };
   writeConfig(root, config);
@@ -174,9 +194,19 @@ async function applyInit(
 
   log.step('Initializing Git repository...');
   if (!fileExists(path.join(root, '.git'))) {
-    await initRepo(root);
+    await initRepo(root, defaultBranch);
   }
   await addAndCommit(root, 'chore: init dojo workspace');
+}
+
+async function autoCommitWorkspaceConfig(root: string, message: string): Promise<void> {
+  try {
+    await stagePathsAndCommit(root, ['.dojo/config.json'], message);
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error);
+    log.warn(`Repository was registered, but Dojo could not auto-commit .dojo/config.json: ${detail}`);
+    log.warn('Run `git status` and commit the workspace config before switching sessions.');
+  }
 }
 
 async function promptOptionalRepos(root: string): Promise<void> {
@@ -202,15 +232,24 @@ async function promptOptionalRepos(root: string): Promise<void> {
     log.step(`Cloning ${repoName}...`);
     try {
       await cloneRepo(gitUrl, fullPath);
+      const detectedDefaultBranch = await getCurrentBranch(fullPath).catch(() => 'main');
+      const defaultBranch = await promptBranchName(`Default branch for ${repoName}`, {
+        defaultValue: detectedDefaultBranch,
+        repoPath: fullPath,
+        requireExisting: true,
+        missingMessage: 'Choose an existing local or remote branch for the repository baseline',
+      });
+      await alignRepoToExistingBranch(fullPath, defaultBranch);
       const repoConfig: RepoConfig = {
         name: repoName,
         type: repoType,
         git: gitUrl,
         path: repoPath,
-        default_branch: 'main',
+        default_branch: defaultBranch,
         description: repoDesc,
       };
       addRepo(root, repoConfig);
+      await autoCommitWorkspaceConfig(root, `chore: register repository ${repoName}`);
       log.success(`Repository "${repoName}" added.`);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -256,8 +295,12 @@ async function doInit(root: string): Promise<void> {
   console.log();
 
   const { name, description } = await promptWorkspaceProfile(path.basename(root));
+  const defaultBranch = await promptBranchName('Workspace baseline branch', {
+    defaultValue: await getCurrentBranch(root).catch(() => 'main'),
+    repoPath: fileExists(path.join(root, '.git')) ? root : undefined,
+  });
   const { agents, agent_commands } = await promptAgentPreferences();
-  await applyInit(root, name, description, agents, agent_commands);
+  await applyInit(root, name, description, defaultBranch, agents, agent_commands);
 
   const absRoot = path.resolve(root);
   log.success(`Workspace "${name}" initialized.`);
@@ -302,8 +345,11 @@ async function doCreate(cliNameArg?: string): Promise<void> {
   }
 
   const description = await input({ message: 'Workspace description:' });
+  const defaultBranch = await promptBranchName('Workspace baseline branch', {
+    defaultValue: 'main',
+  });
   const { agents, agent_commands } = await promptAgentPreferences();
-  await applyInit(targetDir, name, description, agents, agent_commands);
+  await applyInit(targetDir, name, description, defaultBranch, agents, agent_commands);
 
   const absTarget = path.resolve(targetDir);
   log.success(`Workspace "${name}" initialized.`);

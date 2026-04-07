@@ -1,0 +1,132 @@
+#!/usr/bin/expect -f
+set timeout 60
+
+set step [lindex $argv 0]
+set root_dir $env(ROOT_DIR)
+set smoke_dir $env(SMOKE_DIR)
+set workspace_dir $env(WORKSPACE_DIR)
+set local_repo_dir $env(LOCAL_REPO_DIR)
+set transcripts_dir $env(TRANSCRIPTS_DIR)
+set dojo_bin [file join $root_dir dist bin dojo.js]
+set env(NO_COLOR) 1
+
+proc wait_for_prompt {pattern} {
+  expect {
+    -re $pattern { return }
+    timeout { puts stderr "Timed out waiting for prompt: $pattern"; exit 1 }
+    eof { puts stderr "Process exited before prompt: $pattern"; exit 1 }
+  }
+}
+
+proc start_log {name} {
+  global transcripts_dir
+  catch {log_file}
+  log_file -noappend [file join $transcripts_dir $name]
+}
+
+proc finish_step {} {
+  catch {log_file}
+}
+
+if {$step eq "create"} {
+  start_log "01-create.log"
+  spawn bash -lc "cd \"$smoke_dir\" && node \"$dojo_bin\" create"
+  wait_for_prompt {Workspace name:}
+  send "workspace\r"
+  wait_for_prompt {Workspace description:}
+  send "TTY smoke workspace\r"
+  wait_for_prompt {Workspace baseline branch}
+  send "\r"
+  wait_for_prompt {AI tools to enable:}
+  send " \r"
+  wait_for_prompt {Configure custom CLI commands for the selected tools\?}
+  send "\r"
+  wait_for_prompt {Add a Git repository now\?}
+  send "n\r"
+  expect eof
+  finish_step
+  exit 0
+}
+
+if {$step eq "repo-add"} {
+  start_log "02-repo-add.log"
+  spawn bash -lc "cd \"$workspace_dir\" && node \"$dojo_bin\" repo add --local \"$local_repo_dir\""
+  wait_for_prompt {Default branch for local-repo}
+  send "\033\[B\033\[B\033\[B\033\[B\r"
+  wait_for_prompt {type to search, Tab to complete}
+  send "\t\t"
+
+  expect {
+    -re {Use \"Use } {
+      puts stderr "Nested autocomplete labels detected after repeated Tab"
+      exit 1
+    }
+    -re {master} {}
+    timeout {
+      puts stderr "Did not see stable branch candidates after repeated Tab"
+      exit 1
+    }
+  }
+
+  send "\r"
+  wait_for_prompt {Repository type \(local-repo\):}
+  send "\r"
+  wait_for_prompt {Repository description:}
+  send "TTY smoke local repo\r"
+  wait_for_prompt {added to the workspace}
+  expect eof
+  finish_step
+  exit 0
+}
+
+if {$step eq "session-new"} {
+  start_log "03-session-new.log"
+  spawn bash -lc "cd \"$workspace_dir\" && node \"$dojo_bin\" session new"
+  wait_for_prompt {Session ID \(kebab-case\):}
+  send "tty-smoke\r"
+  wait_for_prompt {Session description:}
+  send "TTY smoke session\r"
+  wait_for_prompt {External link \(optional\):}
+  send "\r"
+  wait_for_prompt {Workspace root: branch mode}
+  send "\r"
+  wait_for_prompt {Workspace root: base branch}
+  send "\r"
+  wait_for_prompt {Workspace root: target branch}
+  send "\r"
+  wait_for_prompt {Workspace root: confirm branch setup}
+  send "\r"
+  wait_for_prompt {Repositories in this session:}
+  send " \r"
+  wait_for_prompt {Repo local-repo: branch mode}
+  send "\033\[B\r"
+  wait_for_prompt {Repo local-repo: target branch}
+  send "\033\[B\r"
+  wait_for_prompt {Repo local-repo: confirm branch setup}
+  send "\r"
+  wait_for_prompt {Session \"tty-smoke\" created and active\.}
+  expect eof
+  finish_step
+  exit 0
+}
+
+if {$step eq "session-none"} {
+  start_log "04-session-clear.log"
+  spawn bash -lc "cd \"$workspace_dir\" && node \"$dojo_bin\" session none"
+  wait_for_prompt {Workspace returned to no-session baseline mode\.}
+  expect eof
+  finish_step
+  exit 0
+}
+
+if {$step eq "session-resume"} {
+  start_log "05-session-resume.log"
+  spawn bash -lc "cd \"$workspace_dir\" && node \"$dojo_bin\" session resume tty-smoke"
+  wait_for_prompt {Session \"tty-smoke\" resumed and active\.}
+  expect eof
+  finish_step
+  exit 0
+}
+
+puts stderr "Unknown smoke step: $step"
+exit 1

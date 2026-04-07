@@ -96,9 +96,10 @@ describe('dojo init starter provisioning', () => {
     expect(fs.existsSync(path.join(tmpDir, '.dojo', 'artifacts', 'product-requirement.js'))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, '.dojo', 'skills', 'dojo-template-authoring', 'SKILL.md'))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, '.dojo', 'types', 'dojo-artifact-plugin.d.ts'))).toBe(true);
-    expect(fs.existsSync(path.join(tmpDir, '.agents', 'commands', 'dojo-prd.md'))).toBe(true);
-    expect(fs.existsSync(path.join(tmpDir, '.agents', 'skill', 'dojo-template-authoring.md'))).toBe(true);
-    const claudeSkillPath = path.join(tmpDir, '.claude', 'skills', 'dojo-template-authoring.md');
+    expect(fs.existsSync(path.join(tmpDir, '.agents', 'commands', 'dojo-prd.md'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, '.agents', 'commands', 'dojo-gen-doc.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.agents', 'skills', 'dojo-template-authoring', 'SKILL.md'))).toBe(true);
+    const claudeSkillPath = path.join(tmpDir, '.claude', 'skills', 'dojo-template-authoring', 'SKILL.md');
     expect(fs.existsSync(claudeSkillPath)).toBe(true);
     expect(fs.lstatSync(claudeSkillPath).isSymbolicLink()).toBe(true);
     expect(fs.readFileSync(claudeSkillPath, 'utf-8')).toContain('Dojo Template Authoring');
