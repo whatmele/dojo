@@ -2,23 +2,10 @@ import chalk from 'chalk';
 import { Command } from 'commander';
 import { findWorkspaceRoot } from '../core/workspace.js';
 import { readConfig } from '../core/config.js';
-import { getActiveSession, readSessionState, sessionExists } from '../core/state.js';
-import { reconcileWorkspaceState } from '../core/session-reconciler.js';
-import { normalizeSessionState } from '../core/target-state.js';
-import type { ReconciledItem, WorkspaceConfig, WorkspaceReconciliation } from '../types.js';
+import { getActiveSession, listSessions, readSessionState, sessionExists } from '../core/state.js';
+import { buildTaskOverview } from '../core/task-overview.js';
+import type { RepoConfig, SessionState } from '../types.js';
 import { log } from '../utils/logger.js';
-
-function colorOverall(value: WorkspaceReconciliation['overall']): string {
-  if (value === 'aligned') return chalk.green(value);
-  if (value === 'drifted') return chalk.yellow(value);
-  return chalk.red(value);
-}
-
-function colorStatus(value: ReconciledItem['status']): string {
-  if (value === 'aligned') return chalk.green(value);
-  if (value === 'branch-mismatch') return chalk.yellow(value);
-  return chalk.red(value);
-}
 
 function pad(value: string, width: number): string {
   return value.padEnd(width, ' ');
@@ -31,107 +18,135 @@ function columnWidths(rows: string[][]): number[] {
 function renderRow(row: string[], widths: number[], statusColumnIndex?: number): string {
   return row.map((cell, index) => {
     if (index === statusColumnIndex) {
-      return colorStatus(cell as ReconciledItem['status']);
+      return colorSessionStatus(cell);
     }
     return pad(cell, widths[index]);
   }).join(' | ');
 }
 
-function recoveryHint(
-  item: ReconciledItem,
-  root: string,
-  config: WorkspaceConfig,
-  reconciliation: WorkspaceReconciliation,
-): string | null {
-  const repo = item.name === 'workspace-root'
-    ? { path: root, default_branch: reconciliation.root.expected_branch }
-    : config.repos.find((candidate) => candidate.name === item.name);
-  const pathLabel = item.name === 'workspace-root' ? root : repo?.path ?? item.name;
-
-  switch (item.status) {
-    case 'dirty':
-      return `${item.name}: run \`git status\` in ${pathLabel}, then commit, stash, or discard changes before switching.`;
-    case 'branch-mismatch':
-      return reconciliation.session_id
-        ? `${item.name}: checkout "${item.expected_branch}" or run \`dojo session resume ${reconciliation.session_id}\` to restore the session layout.${item.dirty ? ' Also clean local changes before switching.' : ''}`
-        : `${item.name}: checkout the baseline branch "${item.expected_branch}" or run \`dojo session none\`.${item.dirty ? ' Also clean local changes before switching.' : ''}`;
-    case 'missing-repo':
-      return `${item.name}: restore the repo at ${pathLabel}, or remove/update the repo binding before switching.`;
-    case 'not-git':
-      return `${item.name}: ${pathLabel} exists but is not a Git repo. Re-clone or repair it first.`;
-    case 'detached-head':
-      return `${item.name}: checkout a named branch in ${pathLabel} before starting or switching.`;
-    default:
-      return null;
-  }
+function colorSessionStatus(value: string): string {
+  if (value === 'active') return chalk.green(value);
+  if (value === 'completed') return chalk.cyan(value);
+  if (value === 'suspended') return chalk.yellow(value);
+  return value;
 }
 
-function printReconciliation(
-  label: string,
-  root: string,
-  config: WorkspaceConfig,
-  reconciliation: Awaited<ReturnType<typeof reconcileWorkspaceState>>,
-): void {
+function printRepoTable(repos: RepoConfig[]): void {
+  if (repos.length === 0) {
+    log.warn('No repositories registered yet.');
+    return;
+  }
+
   const rows = [
-    ['Scope', 'Expected', 'Current', 'Dirty', 'Status'],
-    [
-      'workspace-root',
-      reconciliation.root.expected_branch,
-      reconciliation.root.current_branch ?? '-',
-      reconciliation.root.dirty ? 'yes' : 'no',
-      reconciliation.root.status,
-    ],
-    ...reconciliation.repos.map((item) => [
-      item.name,
-      item.expected_branch,
-      item.current_branch ?? '-',
-      item.dirty ? 'yes' : 'no',
-      item.status,
-    ]),
+    ['Repo', 'Type', 'Path', 'Git'],
+    ...repos.map((repo) => [repo.name, repo.type, repo.path, repo.git]),
   ];
   const widths = columnWidths(rows);
-  const hints = [
-    reconciliation.root,
-    ...reconciliation.repos,
-  ]
-    .map((item) => recoveryHint(item, root, config, reconciliation))
-    .filter((hint): hint is string => Boolean(hint));
-
-  log.info(`${label}`);
-  log.info(`Mode: ${reconciliation.mode} | Overall: ${colorOverall(reconciliation.overall)}`);
-  console.log();
 
   console.log(chalk.bold(renderRow(rows[0], widths)));
   console.log(chalk.dim(widths.map((width) => '-'.repeat(width)).join('-|-')));
-  rows.slice(1).forEach((row) => {
-    console.log(renderRow(row, widths, 4));
-  });
-
-  if (hints.length > 0) {
-    console.log();
-    log.warn('How to recover');
-    for (const hint of [...new Set(hints)]) {
-      log.warn(`  - ${hint}`);
-    }
+  for (const row of rows.slice(1)) {
+    console.log(renderRow(row, widths));
   }
+}
+
+function printSessionTable(sessions: SessionState[], activeId: string | null): void {
+  if (sessions.length === 0) {
+    log.warn('No sessions found.');
+    return;
+  }
+
+  const rows = [
+    ['Session', 'Status', 'Updated', 'Description'],
+    ...sessions.map((session) => [
+      activeId === session.id ? `${session.id} *` : session.id,
+      session.status,
+      session.updated_at ?? session.created_at,
+      session.description,
+    ]),
+  ];
+  const widths = columnWidths(rows);
+
+  console.log(chalk.bold(renderRow(rows[0], widths)));
+  console.log(chalk.dim(widths.map((width) => '-'.repeat(width)).join('-|-')));
+  for (const row of rows.slice(1)) {
+    console.log(renderRow(row, widths, 1));
+  }
+}
+
+function printTaskSummary(root: string, sessionId: string): void {
+  const overview = buildTaskOverview(root, sessionId);
+  if (overview.items.length === 0) {
+    log.warn('No tasks tracked for the active session yet.');
+    return;
+  }
+  log.info(
+    `Tasks: total=${overview.summary.total} ready=${overview.summary.ready} blocked=${overview.summary.blocked} done=${overview.summary.done} untracked=${overview.summary.untracked}`,
+  );
+  const readyTasks = overview.items.filter((item) => item.dependency_status === 'ready');
+  if (readyTasks.length > 0) {
+    log.info(`Current actionable tasks: ${readyTasks.map((item) => item.name).join(', ')}`);
+  }
+}
+
+function printWorkspaceRuntimeOverview(): void {
+  const root = findWorkspaceRoot();
+  const config = readConfig(root);
+  const active = getActiveSession(root);
+  const sessions = listSessions(root);
+
+  log.info(`Workspace "${config.workspace.name}"`);
+  log.info(`Mode: ${active ? 'session' : 'baseline'}`);
+  log.info(`Active session: ${active?.id ?? '-'}`);
+  log.info(`Agents: ${config.agents.join(', ')}`);
+  log.info(`Registered repos: ${config.repos.length}`);
+  log.info(`Sessions: ${sessions.length}`);
+  log.info(`Context path: ${root}/.dojo/context.md`);
+  if (active) {
+    log.info(`Artifact root: ${root}/.dojo/sessions/${active.id}/`);
+  }
+
+  console.log();
+  log.info('Registered repositories');
+  printRepoTable(config.repos);
+
+  if (sessions.length > 0) {
+    console.log();
+    log.info('Known sessions');
+    printSessionTable(sessions, active?.id ?? null);
+  }
+
+  if (active) {
+    console.log();
+    log.info(`Active session "${active.id}"`);
+    printTaskSummary(root, active.id);
+  }
+}
+
+function printSessionDetail(target: SessionState): void {
+  const root = findWorkspaceRoot();
+  const active = getActiveSession(root);
+
+  log.info(`Session "${target.id}"`);
+  log.info(`Status: ${colorSessionStatus(target.status)}`);
+  log.info(`Description: ${target.description}`);
+  log.info(`Created: ${target.created_at}`);
+  log.info(`Updated: ${target.updated_at ?? target.created_at}`);
+  log.info(`Artifact root: ${root}/.dojo/sessions/${target.id}/`);
+  if (target.external_link) {
+    log.info(`Link: ${target.external_link}`);
+  }
+  log.info(`Active now: ${active?.id === target.id ? 'yes' : 'no'}`);
+  console.log();
+  printTaskSummary(root, target.id);
 }
 
 export function registerStatusCommand(program: Command): void {
   program
     .command('status')
-    .description('Show current workspace alignment status')
-    .action(async () => {
-      const root = findWorkspaceRoot();
-      const config = readConfig(root);
-      const active = getActiveSession(root);
-      const normalized = active ? normalizeSessionState(active, config) : null;
-      const reconciliation = await reconcileWorkspaceState(root, config, normalized);
-      printReconciliation(
-        normalized ? `Active session "${normalized.id}"` : 'No active session (baseline mode)',
-        root,
-        config,
-        reconciliation,
-      );
+    .description('Show current runtime overview')
+    .action(() => {
+      printWorkspaceRuntimeOverview();
     });
 
   const session = program.commands.find((command) => command.name() === 'session');
@@ -139,31 +154,19 @@ export function registerStatusCommand(program: Command): void {
 
   session
     .command('list')
-    .description('List sessions and health summaries')
-    .action(async () => {
+    .description('List Dojo sessions')
+    .action(() => {
       const root = findWorkspaceRoot();
-      const config = readConfig(root);
       const active = getActiveSession(root);
-      const { listSessions } = await import('../core/state.js');
       const sessions = listSessions(root);
-      if (sessions.length === 0) {
-        log.warn('No sessions found.');
-        return;
-      }
-      for (const item of sessions) {
-        const normalized = normalizeSessionState(item, config);
-        const reconciliation = await reconcileWorkspaceState(root, config, normalized);
-        const activeMark = active?.id === item.id ? ' (active)' : '';
-        log.info(`${item.id}${activeMark} [${item.status}] repos=${normalized.repos?.length ?? 0} health=${reconciliation.overall} — ${item.description}`);
-      }
+      printSessionTable(sessions, active?.id ?? null);
     });
 
   session
     .command('status [session-id]')
-    .description('Show detailed status for one session or the current active session')
-    .action(async (sessionId?: string) => {
+    .description('Show one session or the current active session')
+    .action((sessionId?: string) => {
       const root = findWorkspaceRoot();
-      const config = readConfig(root);
       const target = sessionId
         ? (sessionExists(root, sessionId) ? readSessionState(root, sessionId) : null)
         : getActiveSession(root);
@@ -173,8 +176,6 @@ export function registerStatusCommand(program: Command): void {
         process.exit(1);
       }
 
-      const normalized = normalizeSessionState(target, config);
-      const reconciliation = await reconcileWorkspaceState(root, config, normalized);
-      printReconciliation(`Session "${normalized.id}"`, root, config, reconciliation);
+      printSessionDetail(target);
     });
 }

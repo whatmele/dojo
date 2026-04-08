@@ -12,8 +12,6 @@ const session: SessionState = {
   description: 'Artifact plugin validation',
   created_at: '2026-04-07T00:00:00Z',
   status: 'active',
-  workspace_branch: 'feature/plugin-session',
-  repo_branches: {},
 };
 
 function writeArtifact(name: string, source: string): void {

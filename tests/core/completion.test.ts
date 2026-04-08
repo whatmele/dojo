@@ -30,9 +30,9 @@ describe('shell completion', () => {
     const script = renderZshCompletion(buildProgram());
 
     expect(script).toContain('#compdef dojo');
-    expect(script).toContain("'session:Development session management ([options] [command])'");
-    expect(script).toContain("'new:Create a new dev session ([options])'");
-    expect(script).toContain("'none:Return the workspace to no-session baseline mode ([options])'");
+    expect(script).toContain("'session:Dojo work session management ([options] [command])'");
+    expect(script).toContain("'new:Create a new Dojo session ([options])'");
+    expect(script).toContain("'none:Return the workspace to baseline runtime mode ([options])'");
     expect(script).toContain("'template:Template management ([options] [command])'");
     expect(script).toContain("'task:Task overview and execution status ([options] [command])'");
     expect(script).toContain("'lint:Validate Dojo command templates ([options] [target])'");

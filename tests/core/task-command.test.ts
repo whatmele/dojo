@@ -28,12 +28,6 @@ beforeEach(() => {
     description: 'Task session',
     created_at: new Date().toISOString(),
     status: 'active',
-    repos: [],
-    workspace_root: {
-      target_branch: 'feature/sess-1',
-      base_branch: 'main',
-      branch_source: 'created',
-    },
   });
   writeTaskManifest(tmpDir, 'sess-1', {
     tasks: [

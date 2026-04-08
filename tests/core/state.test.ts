@@ -23,7 +23,6 @@ const testSession: SessionState = {
   description: 'Test session',
   created_at: '2026-04-04T10:00:00Z',
   status: 'active',
-  repo_branches: { 'svc-a': 'feature/test' },
 };
 
 beforeEach(() => { tmpDir = setup(); });
@@ -53,7 +52,7 @@ describe('session state', () => {
     const state = readSessionState(tmpDir, 'test-session');
     expect(state.id).toBe('test-session');
     expect(state.status).toBe('active');
-    expect(state.repo_branches['svc-a']).toBe('feature/test');
+    expect(state.description).toBe('Test session');
   });
 
   it('readSessionState throws when not found', () => {

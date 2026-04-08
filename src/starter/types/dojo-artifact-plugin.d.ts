@@ -20,8 +20,7 @@ export interface ArtifactPlugin {
       id: string;
       description: string;
       status: string;
-      workspace_branch?: string;
-      repo_branches: Record<string, string>;
+      external_link?: string;
     };
   }): Promise<string | null> | string | null;
 }

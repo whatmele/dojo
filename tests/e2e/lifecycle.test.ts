@@ -94,7 +94,6 @@ describe('E2E lifecycle', () => {
         type: 'biz',
         git: bareA,
         path: 'repos/biz/svc-a',
-        default_branch: 'master',
         description: 'Service A',
       }],
     };
@@ -122,7 +121,6 @@ describe('E2E lifecycle', () => {
       description: '用户认证重构',
       created_at: new Date().toISOString(),
       status: 'active',
-      repo_branches: { 'svc-a': 'feature/user-auth' },
     };
     writeSessionState(workspaceRoot, sessionId, sessionState);
     writeWorkspaceState(workspaceRoot, { active_session: sessionId });
@@ -189,7 +187,6 @@ describe('E2E lifecycle', () => {
       description: '性能优化',
       created_at: new Date().toISOString(),
       status: 'active',
-      repo_branches: {},
     };
     const session2Dir = getSessionDir(workspaceRoot, session2Id);
     ensureDir(path.join(session2Dir, 'product-requirements'));

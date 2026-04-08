@@ -1,6 +1,6 @@
 # Dojo — Technical Design
 
-This document describes the current technical shape of Dojo after the runtime simplification.
+This document describes the current technical shape of Dojo after the MVP runtime simplification.
 
 ## 1. Architecture summary
 
@@ -13,7 +13,7 @@ It is built around four concepts:
 3. `template`
 4. `context`
 
-There is no separate `kind`, `summarizer plugin`, or `context pipeline item` model anymore.
+There is no branch-planner, workspace reconciler, or Git layout control plane in the current design.
 
 ## 2. Main modules
 
@@ -24,7 +24,10 @@ There is no separate `kind`, `summarizer plugin`, or `context pipeline item` mod
 - `src/commands/session.ts`
 - `src/commands/context.ts`
 - `src/commands/start.ts`
+- `src/commands/status.ts`
+- `src/commands/task.ts`
 - `src/commands/template.ts`
+- `src/commands/artifact.ts`
 
 These handlers stay thin and delegate runtime work to `src/core/`.
 
@@ -32,11 +35,12 @@ These handlers stay thin and delegate runtime work to `src/core/`.
 
 - `src/core/config.ts` — workspace config read/write
 - `src/core/state.ts` — workspace and session state read/write
-- `src/core/git.ts` — branch and repo operations
-- `src/core/workspace.ts` — workspace discovery and helpers
+- `src/core/git.ts` — repo bootstrap and commit helpers
+- `src/core/workspace.ts` — workspace discovery and path helpers
 - `src/core/protocol.ts` — artifact plugin loading, template syntax helpers, validation, directory resolution
 - `src/core/command-distributor.ts` — render templates into `.agents/commands/`
 - `src/core/context-generator.ts` — generate `.dojo/context.md`
+- `src/core/task-overview.ts` — derive task overview from manifest + task state
 
 ### Template and starter assets
 
@@ -51,36 +55,39 @@ A session owns:
 
 - `id`
 - `description`
+- `external_link?`
 - `created_at`
+- `updated_at?`
 - `status`
-- `workspace_branch`
-- `repo_branches`
 
 Important rule:
 
-**the workspace root branch switches with the session.**
+**a session is a runtime namespace, not a Git branch layout.**
 
-That keeps root-level docs, templates, and session state aligned with the same work item.
+Session activation changes:
 
-## 4. Artifact plugin model
+- the active session id in `.dojo/state.json`
+- the rendered command set under `.agents/commands/`
+- the generated `.dojo/context.md`
+- the artifact directory namespace used by session-scoped templates
 
-Artifact plugins are loaded from:
+It does **not** switch repo branches.
 
-1. built-ins under `src/builtins/artifacts/`
-2. workspace-local overrides/extensions under `.dojo/artifacts/`
+## 4. Repository model
 
-Workspace-local plugins override built-ins by `id`.
+Repositories are registry entries in `.dojo/config.json`.
 
-Each plugin provides:
+Each repo entry contains:
 
-- `id`
-- `dir`
-- `description?`
-- `renderContext()`
+- `name`
+- `type`
+- `git`
+- `path`
+- `description`
 
-The runtime resolves the directory by expanding `dir` with the current session id.
+`dojo repo add` may clone a remote repo or register a local repo path, but Dojo does not try to align or validate branches.
 
-## 5. Template rendering model
+## 5. Command rendering model
 
 Template source files live under `.dojo/commands/`.
 
@@ -101,14 +108,24 @@ Rendering flow:
 
 `.dojo/context.md` is generated from:
 
-1. fixed runtime header
+1. a fixed runtime header
 2. `context.artifacts` in `.dojo/config.json`
 3. loaded artifact plugins
 4. each plugin's `renderContext()` output
 
-The configured artifact order is also the context section order.
+The header now focuses on runtime mode, not Git state.
 
-If `context.artifacts` is omitted, Dojo falls back to the default built-in order and then appends any extra plugins.
+It includes:
+
+- active session or baseline mode
+- registered repositories
+- context notes
+
+When no session is active:
+
+- session-scoped commands are hidden
+- workspace and mixed-scope artifacts may still render
+- session placeholders use the internal `baseline` token when needed for no-session expansion
 
 ## 7. Skill provisioning model
 
@@ -116,60 +133,44 @@ If `context.artifacts` is omitted, Dojo falls back to the default built-in order
 
 - source: `src/skills/dojo-template-authoring/SKILL.md`
 - installed path: `.dojo/skills/dojo-template-authoring/SKILL.md`
+- materialized path: `.agents/skills/dojo-template-authoring/SKILL.md`
+- tool link example: `.claude/skills/dojo-template-authoring/SKILL.md`
 
-That gives AI tools a canonical local instruction file for template and artifact authoring.
+## 8. Start behavior
 
-## 8. Template validation
-
-The runtime exposes:
-
-```bash
-dojo template lint
-dojo template lint dojo-tech-design
-dojo template lint .dojo/commands/dojo-tech-design.md
-dojo template create dojo-my-command --output tech-design --reads research,tasks
-dojo artifact create dev-plan --description "Development plan docs."
-```
-
-Validation covers:
-
-- unknown artifact ids
-- malformed directives
-- malformed placeholders
-- broken session block markers
-
-The same validation path is used both for explicit linting and for command materialization.
-
-## 9. Init behavior
-
-`dojo init` should:
-
-1. create `.dojo/commands/`, `.dojo/artifacts/`, `.dojo/skills/`, `.dojo/sessions/`, and `.agents/commands/`
-2. write `.dojo/config.json` and `.dojo/state.json`
-3. copy built-in starter templates
-4. copy built-in artifact plugins
-5. copy the built-in skill asset
-6. render the initial no-session command set
-7. initialize Git if needed
-
-## 10. Start behavior
-
-`dojo start` should:
+`dojo start` does exactly this:
 
 1. detect the active session
 2. regenerate rendered commands
 3. regenerate `.dojo/context.md`
 4. launch the selected coding tool
 
-This ensures the tool starts from current disk-backed state.
+It deliberately does not gate on branch state.
 
-## 11. Deliberate simplifications
+## 9. Status behavior
+
+`dojo status` is now a runtime overview, not a Git alignment dashboard.
+
+It shows:
+
+- workspace name
+- active session or baseline mode
+- enabled agents
+- registered repos
+- known sessions
+- active-session task summary when available
+
+`dojo session status` shows one session's metadata and task summary.
+
+## 10. Deliberate simplifications
 
 The current runtime deliberately avoids:
 
-- a separate artifact registry file for concrete outputs
-- a summarizer plugin layer separate from artifact plugins
-- large template frontmatter metadata blocks
+- Git branch switching
+- dirty-worktree blocking
+- branch existence validation
+- repo-to-session branch bindings
+- workspace reconciliation and switch planning
 - live context reinjection into already-running AI sessions
 
-Those were removed to keep the system more understandable and easier to extend.
+Those were removed to keep the system easier to use and easier to extend.

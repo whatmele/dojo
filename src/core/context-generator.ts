@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { DOJO_DIR } from '../types.js';
 import type {
   ArtifactPlugin,
   ArtifactPluginHelpers,
@@ -13,9 +12,6 @@ import {
   validateContextArtifacts,
 } from './protocol.js';
 import { fileExists, listDirs, listFiles, readJSON, readText, writeText } from '../utils/fs.js';
-import { getWorkspaceRootBaselineBranch } from './baseline.js';
-import { reconcileWorkspaceState } from './session-reconciler.js';
-import { normalizeSessionState } from './target-state.js';
 
 function normalizeSlashes(value: string): string {
   return value.split(path.sep).join('/');
@@ -36,12 +32,12 @@ function buildHelpers(root: string, config: WorkspaceConfig, session: SessionSta
     listMarkdownFiles: (dir: string | null): string[] => {
       if (!dir || !fileExists(dir)) return [];
       return listFiles(dir)
-        .filter(file => /\.(md|mdx)$/i.test(file))
-        .map(file => path.join(dir, file));
+        .filter((file) => /\.(md|mdx)$/i.test(file))
+        .map((file) => path.join(dir, file));
     },
     listDirs: (dir: string | null): string[] => {
       if (!dir || !fileExists(dir)) return [];
-      return listDirs(dir).map(name => path.join(dir, name));
+      return listDirs(dir).map((name) => path.join(dir, name));
     },
     readText: (filePath: string, maxChars = 1200): string => {
       if (!filePath || !fileExists(filePath)) return '';
@@ -58,7 +54,7 @@ function buildHelpers(root: string, config: WorkspaceConfig, session: SessionSta
     relative: (filePath: string): string => normalizeSlashes(path.relative(root, filePath)),
     pickPreferred: (files: string[], preferredNames: string[]): string | null => {
       for (const preferredName of preferredNames) {
-        const found = files.find(file => path.basename(file).toLowerCase() === preferredName.toLowerCase());
+        const found = files.find((file) => path.basename(file).toLowerCase() === preferredName.toLowerCase());
         if (found) return found;
       }
       return files[0] ?? null;
@@ -66,60 +62,38 @@ function buildHelpers(root: string, config: WorkspaceConfig, session: SessionSta
   };
 }
 
-function renderHeader(
-  session: SessionState | null,
-  config: WorkspaceConfig,
-  reconciliation: Awaited<ReturnType<typeof reconcileWorkspaceState>>,
-): string {
+function renderHeader(session: SessionState | null, config: WorkspaceConfig): string {
   const lines: string[] = [];
   lines.push('# Workspace context');
   lines.push('');
   lines.push(session
     ? 'Startup and handoff context for the active Dojo session.'
-    : 'Startup context for the workspace in no-session mode.');
+    : 'Startup context for the workspace in baseline mode.');
   lines.push('');
+
   if (session) {
-    lines.push(`This workspace is working on: **${session.description}**`);
-    lines.push('');
     lines.push('## Current session');
     lines.push(`- Session ID: ${session.id}`);
     lines.push(`- Status: ${session.status}`);
-    lines.push(`- Session health: ${reconciliation.overall}`);
-    lines.push(`- Workspace root target branch: ${session.workspace_root?.target_branch ?? getWorkspaceRootBaselineBranch(config)}`);
+    lines.push(`- Description: ${session.description}`);
     if (session.external_link) {
       lines.push(`- Link: ${session.external_link}`);
     }
+    lines.push(`- Artifact root: .dojo/sessions/${session.id}/`);
   } else {
-    lines.push('No active session.');
-    lines.push('');
     lines.push('## Current mode');
-    lines.push('- Mode: no-session');
-    lines.push(`- Workspace root baseline branch: ${getWorkspaceRootBaselineBranch(config)}`);
-    lines.push(`- Workspace health: ${reconciliation.overall}`);
+    lines.push('- Mode: baseline');
+    lines.push('- No active session');
+    lines.push('- Session-scoped commands are hidden in this mode');
   }
   lines.push('');
 
-  lines.push('## Workspace root');
-  lines.push('| Expected | Current | Dirty | Status |');
-  lines.push('|----------|---------|-------|--------|');
-  lines.push(`| ${reconciliation.root.expected_branch} | ${reconciliation.root.current_branch ?? '-'} | ${reconciliation.root.dirty ? 'Yes' : 'No'} | ${reconciliation.root.status} |`);
-  lines.push('');
-
-  if (reconciliation.repos.length > 0) {
-    lines.push('## Repositories');
-    lines.push('| Repo | Type | Expected | Current | Dirty | Status |');
-    lines.push('|------|------|----------|---------|-------|--------|');
-    for (const item of reconciliation.repos) {
-      const repo = config.repos.find(r => r.name === item.name);
-      lines.push(`| ${item.name} | ${repo?.type ?? 'unknown'} | ${item.expected_branch} | ${item.current_branch ?? '-'} | ${item.dirty ? 'Yes' : 'No'} | ${item.status} |`);
-    }
-    lines.push('');
-  }
-
-  if (reconciliation.blocking_issues.length > 0) {
-    lines.push('## Blocking issues');
-    for (const issue of reconciliation.blocking_issues) {
-      lines.push(`- ${issue}`);
+  if (config.repos.length > 0) {
+    lines.push('## Registered repositories');
+    lines.push('| Repo | Type | Path | Git |');
+    lines.push('|------|------|------|-----|');
+    for (const repo of config.repos) {
+      lines.push(`| ${repo.name} | ${repo.type} | ${repo.path} | ${repo.git} |`);
     }
     lines.push('');
   }
@@ -127,8 +101,8 @@ function renderHeader(
   lines.push('## Context notes');
   lines.push('- This file is startup and handoff context, not a live mirror.');
   lines.push(session
-    ? '- Read the referenced artifact directories for full detail.'
-    : '- No session artifacts are active in this mode; workspace docs may still be relevant.');
+    ? '- Session-scoped artifact paths point at the active session directory.'
+    : '- Workspace-scoped and mixed artifacts may still be relevant in baseline mode.');
   lines.push('');
   return lines.join('\n');
 }
@@ -140,60 +114,51 @@ export async function buildContextMarkdown(
 ): Promise<string> {
   await validateContextArtifacts(root, config);
   const plugins = await loadArtifactPlugins(root);
-  const normalized = session ? normalizeSessionState(session, config) : null;
-  const reconciliation = await reconcileWorkspaceState(root, config, normalized);
-  const blocks: string[] = [renderHeader(normalized, config, reconciliation)];
+  const blocks: string[] = [renderHeader(session, config)];
 
-  if (!normalized) {
+  if (!session) {
+    const baselineSession: SessionState = {
+      id: 'baseline',
+      description: 'Baseline workspace mode',
+      created_at: '',
+      updated_at: '',
+      status: 'suspended',
+    };
+    const helpers = buildHelpers(root, config, baselineSession, plugins);
+
     for (const artifactId of getContextArtifactOrder(config, plugins)) {
       const artifact = plugins[artifactId];
       if (!artifact || !['workspace', 'mixed'].includes(artifact.scope)) continue;
       const relDir = resolveArtifactDir(artifact, {
         sessionId: null,
+        noSessionPlaceholder: 'baseline',
         workspaceName: config.workspace.name,
         workspaceDescription: config.workspace.description,
       });
       const absDir = relDir ? path.join(root, relDir) : null;
-      const helperSession = {
-        id: 'baseline',
-        description: 'Baseline workspace mode',
-        created_at: '',
-        status: 'suspended',
-        workspace_root: {
-          target_branch: getWorkspaceRootBaselineBranch(config),
-          base_branch: getWorkspaceRootBaselineBranch(config),
-          branch_source: 'existing',
-        },
-        repos: [],
-      } satisfies SessionState;
-      const helpers = buildHelpers(root, config, helperSession, plugins);
       const block = await artifact.renderContext({
         root,
         config,
-        session: helperSession,
+        session: baselineSession,
         artifact,
         dir: absDir,
         helpers,
       });
-      if (!block?.trim()) continue;
-      blocks.push(block.trim());
+      if (block?.trim()) {
+        blocks.push(block.trim());
+      }
     }
+
     return blocks.join('\n\n') + '\n';
   }
 
-  const helpers = buildHelpers(root, config, normalized, plugins);
-
+  const helpers = buildHelpers(root, config, session, plugins);
   for (const artifactId of getContextArtifactOrder(config, plugins)) {
     const artifact = plugins[artifactId];
     if (!artifact) continue;
-    if (artifact.scope === 'workspace' || artifact.scope === 'mixed' || artifact.scope === 'session') {
-      // allowed in active session mode
-    } else {
-      continue;
-    }
-
+    if (!['workspace', 'mixed', 'session'].includes(artifact.scope)) continue;
     const relDir = resolveArtifactDir(artifact, {
-      sessionId: normalized.id,
+      sessionId: session.id,
       workspaceName: config.workspace.name,
       workspaceDescription: config.workspace.description,
     });
@@ -201,15 +166,14 @@ export async function buildContextMarkdown(
     const block = await artifact.renderContext({
       root,
       config,
-      session: normalized,
+      session,
       artifact,
       dir: absDir,
       helpers,
     });
-    if (!block) continue;
-    const trimmed = block.trim();
-    if (!trimmed) continue;
-    blocks.push(trimmed);
+    if (block?.trim()) {
+      blocks.push(block.trim());
+    }
   }
 
   return blocks.join('\n\n') + '\n';
@@ -221,5 +185,5 @@ export async function generateContext(
   config: WorkspaceConfig,
 ): Promise<void> {
   const content = await buildContextMarkdown(root, session, config);
-  writeText(path.join(root, DOJO_DIR, 'context.md'), content);
+  writeText(path.join(root, '.dojo', 'context.md'), content);
 }

@@ -120,8 +120,6 @@ describe('protocol runtime end-to-end', () => {
       description: 'Custom protocol runtime flow',
       created_at: '2026-04-07T00:00:00Z',
       status: 'active',
-      workspace_branch: 'feature/custom-runtime',
-      repo_branches: {},
     };
     writeSessionState(workspaceRoot, session.id, session);
     writeWorkspaceState(workspaceRoot, { active_session: session.id });
@@ -169,14 +167,10 @@ describe('protocol runtime end-to-end', () => {
       description: 'Start command verification',
       created_at: '2026-04-07T00:00:00Z',
       status: 'active',
-      workspace_branch: 'feature/start-session',
-      repo_branches: {},
     };
     writeSessionState(workspaceRoot, session.id, session);
     writeWorkspaceState(workspaceRoot, { active_session: session.id });
 
-    const workspaceGit = simpleGit(workspaceRoot);
-    await workspaceGit.checkoutLocalBranch('feature/start-session');
     ensureDir(path.join(workspaceRoot, '.dojo', 'sessions', session.id, 'product-requirements'));
     writeText(path.join(workspaceRoot, '.dojo', 'sessions', session.id, 'product-requirements', 'prd.md'), '# Start PRD');
     writeText(path.join(workspaceRoot, 'dirty-but-allowed.txt'), 'local changes are fine for start');
@@ -217,16 +211,12 @@ describe('protocol runtime end-to-end', () => {
       description: 'First session',
       created_at: '2026-04-07T00:00:00Z',
       status: 'active',
-      workspace_branch: 'feature/session-a',
-      repo_branches: {},
     };
     const sessionB: SessionState = {
       id: 'session-b',
       description: 'Second session',
       created_at: '2026-04-07T00:00:00Z',
       status: 'suspended',
-      workspace_branch: 'feature/session-b',
-      repo_branches: {},
     };
 
     writeSessionState(workspaceRoot, sessionA.id, sessionA);
@@ -271,8 +261,6 @@ describe('protocol runtime end-to-end', () => {
       description: 'Live runtime behavior',
       created_at: '2026-04-07T00:00:00Z',
       status: 'active',
-      workspace_branch: 'feature/live-runtime',
-      repo_branches: {},
     };
     writeSessionState(workspaceRoot, session.id, session);
     writeWorkspaceState(workspaceRoot, { active_session: session.id });

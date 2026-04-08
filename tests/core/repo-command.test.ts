@@ -5,7 +5,6 @@ import path from 'node:path';
 import { Command } from 'commander';
 import { simpleGit } from 'simple-git';
 import { writeConfig } from '../../src/core/config.js';
-import { getCurrentBranch } from '../../src/core/git.js';
 import type { WorkspaceConfig } from '../../src/types.js';
 
 const {
@@ -18,18 +17,10 @@ const {
   confirmMock: vi.fn(),
 }));
 
-const { promptBranchNameMock } = vi.hoisted(() => ({
-  promptBranchNameMock: vi.fn(),
-}));
-
 vi.mock('@inquirer/prompts', () => ({
   input: inputMock,
   select: selectMock,
   confirm: confirmMock,
-}));
-
-vi.mock('../../src/commands/branch-prompts.js', () => ({
-  promptBranchName: promptBranchNameMock,
 }));
 
 const { registerRepoCommand } = await import('../../src/commands/repo.js');
@@ -71,9 +62,6 @@ describe('repo add', () => {
     inputMock.mockReset();
     selectMock.mockReset();
     confirmMock.mockReset();
-    promptBranchNameMock.mockReset();
-
-    promptBranchNameMock.mockResolvedValue('develop');
     selectMock.mockResolvedValue('biz');
     inputMock.mockResolvedValue('Local repository');
     confirmMock.mockResolvedValue(false);
@@ -86,15 +74,15 @@ describe('repo add', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('aligns the repository to the selected baseline branch during local repo registration', async () => {
+  it('registers a local repo without changing its current git branch', async () => {
     const program = new Command();
     registerRepoCommand(program);
 
     await program.parseAsync(['node', 'dojo', 'repo', 'add', '--local', localRepoRoot]);
 
-    expect(await getCurrentBranch(localRepoRoot)).toBe('develop');
+    expect(await simpleGit(localRepoRoot).revparse(['--abbrev-ref', 'HEAD'])).toBe('main');
     const config = JSON.parse(fs.readFileSync(path.join(workspaceRoot, '.dojo', 'config.json'), 'utf-8')) as WorkspaceConfig;
     expect(config.repos).toHaveLength(1);
-    expect(config.repos[0]?.default_branch).toBe('develop');
+    expect(config.repos[0]?.git).toBe(`local:${localRepoRoot}`);
   });
 });

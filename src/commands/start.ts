@@ -1,13 +1,10 @@
 import { Command } from 'commander';
 import { spawn } from 'node:child_process';
-import path from 'node:path';
 import { findWorkspaceRoot } from '../core/workspace.js';
 import { readConfig } from '../core/config.js';
 import { getActiveSession } from '../core/state.js';
 import { generateContext } from '../core/context-generator.js';
 import { distributeCommands } from '../core/command-distributor.js';
-import { reconcileWorkspaceState } from '../core/session-reconciler.js';
-import { normalizeSessionState } from '../core/target-state.js';
 import { log, printBanner } from '../utils/logger.js';
 import type { AgentTool } from '../types.js';
 
@@ -21,7 +18,7 @@ export const TOOL_COMMANDS: Record<AgentTool, string> = {
 export function registerStartCommand(program: Command): void {
   program
     .command('start [tool]')
-    .description('Refresh context and start an AI tool')
+    .description('Refresh runtime context and start an AI tool')
     .action(async (tool?: string) => {
       const root = findWorkspaceRoot();
       const config = readConfig(root);
@@ -30,32 +27,13 @@ export function registerStartCommand(program: Command): void {
       printBanner();
       console.log();
 
-      const normalized = session ? normalizeSessionState(session, config) : null;
-      const reconciliation = await reconcileWorkspaceState(root, config, normalized);
-      const nonDirtyBlockingIssues = reconciliation.blocking_issues
-        .filter((issue) => !issue.endsWith('uncommitted changes') && !issue.endsWith(': dirty'));
-      const hasBranchDrift = [reconciliation.root, ...reconciliation.repos]
-        .some((item) => item.status === 'branch-mismatch' || item.status === 'missing-branch');
+      log.step('Refreshing runtime state...');
+      await distributeCommands(root, session?.id ?? null, config.agents);
+      await generateContext(root, session, config);
 
-      if (nonDirtyBlockingIssues.length > 0 || hasBranchDrift) {
-        log.error(`Workspace is not aligned for ${normalized ? `session "${normalized.id}"` : 'no-session'} mode.`);
-        for (const issue of nonDirtyBlockingIssues) {
-          log.error(`  - ${issue}`);
-        }
-        if (hasBranchDrift) {
-          log.error('  - branch layout does not match the expected workspace mode');
-        }
-        log.info(normalized ? 'Run `dojo session status` to inspect and fix the workspace.' : 'Run `dojo status` to inspect and fix the workspace.');
-        process.exit(1);
-      }
-
-      log.step('Refreshing context...');
       if (session) {
-        await distributeCommands(root, normalized!.id, config.agents);
-        await generateContext(root, normalized, config);
+        log.dim(`  Active session: ${session.id}`);
       } else {
-        await distributeCommands(root, null, config.agents);
-        await generateContext(root, null, config);
         log.dim('  No active session — baseline commands synced; baseline context refreshed.');
       }
 
@@ -68,7 +46,7 @@ export function registerStartCommand(program: Command): void {
         process.exit(1);
       }
 
-      log.success(`Context refreshed. Starting ${targetTool}...`);
+      log.success(`Runtime refreshed. Starting ${targetTool}...`);
 
       const child = spawn(cmd, [], {
         cwd: root,

@@ -6,25 +6,17 @@ import type { RepoType, RepoConfig } from '../types.js';
 import { findWorkspaceRoot, resolveRepoPath } from '../core/workspace.js';
 import { readConfig, addRepo, removeRepo } from '../core/config.js';
 import {
-  alignRepoToExistingBranch,
   cloneRepo,
-  fetchRemote,
-  getCurrentBranch,
-  pullCurrent,
   stagePathsAndCommit,
 } from '../core/git.js';
-import { getActiveSession, listSessions } from '../core/state.js';
-import { normalizeSessionState } from '../core/target-state.js';
 import { fileExists } from '../utils/fs.js';
 import { log } from '../utils/logger.js';
-import { promptBranchName } from './branch-prompts.js';
 
 function parseRepoName(gitUrl: string): string {
   const match = gitUrl.match(/\/([^/]+?)(?:\.git)?$/);
   return match ? match[1] : 'unknown-repo';
 }
 
-/** Path stored in config: relative to workspace when inside it, else absolute. */
 function repoPathForConfig(root: string, absRepoPath: string): string {
   const rel = path.relative(root, absRepoPath);
   if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
@@ -39,14 +31,14 @@ async function autoCommitWorkspaceConfig(root: string, message: string): Promise
   } catch (error: unknown) {
     const detail = error instanceof Error ? error.message : String(error);
     log.warn(`Workspace config changed, but Dojo could not auto-commit .dojo/config.json: ${detail}`);
-    log.warn('Run `git status` and commit the workspace config before switching sessions.');
+    log.warn('Run `git status` if you want to review and commit the updated workspace config.');
   }
 }
 
 export function registerRepoCommand(program: Command): void {
   const repo = program
     .command('repo')
-    .description('Repository management');
+    .description('Repository registry management');
 
   repo
     .command('add <source>')
@@ -67,7 +59,7 @@ export function registerRepoCommand(program: Command): void {
         }
         const name = parsedName;
 
-        const existing = config.repos.find(r => r.name === name);
+        const existing = config.repos.find((r) => r.name === name);
         if (existing) {
           log.error(`Repository "${name}" is already in this workspace.`);
           process.exit(1);
@@ -96,35 +88,11 @@ export function registerRepoCommand(program: Command): void {
           process.exit(1);
         }
 
-        let defaultBranch: string;
-        try {
-          defaultBranch = await getCurrentBranch(fullPath);
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          log.error(`Could not detect default branch: ${msg}`);
-          process.exit(1);
-        }
-        defaultBranch = await promptBranchName(`Default branch for ${name}`, {
-          defaultValue: defaultBranch,
-          repoPath: fullPath,
-          requireExisting: true,
-          missingMessage: 'Choose an existing local or remote branch for the repository baseline',
-        });
-
-        try {
-          await alignRepoToExistingBranch(fullPath, defaultBranch);
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          log.error(`Could not align ${name} to baseline branch "${defaultBranch}": ${msg}`);
-          process.exit(1);
-        }
-
         const repoConfig: RepoConfig = {
           name,
           type,
           git: source,
           path: repoPath,
-          default_branch: defaultBranch,
           description,
         };
 
@@ -151,32 +119,9 @@ export function registerRepoCommand(program: Command): void {
       const gitRef = `local:${fullPath}`;
       const repoPath = repoPathForConfig(root, fullPath);
 
-      const existingLocal = config.repos.find(r => r.name === name);
+      const existingLocal = config.repos.find((r) => r.name === name);
       if (existingLocal) {
         log.error(`Repository "${name}" is already in this workspace.`);
-        process.exit(1);
-      }
-
-      let defaultBranch: string;
-      try {
-        defaultBranch = await getCurrentBranch(fullPath);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        log.error(`Could not read current branch: ${msg}`);
-        process.exit(1);
-      }
-      defaultBranch = await promptBranchName(`Default branch for ${name}`, {
-        defaultValue: defaultBranch,
-        repoPath: fullPath,
-        requireExisting: true,
-        missingMessage: 'Choose an existing local or remote branch for the repository baseline',
-      });
-
-      try {
-        await alignRepoToExistingBranch(fullPath, defaultBranch);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        log.error(`Could not align ${name} to baseline branch "${defaultBranch}": ${msg}`);
         process.exit(1);
       }
 
@@ -196,7 +141,6 @@ export function registerRepoCommand(program: Command): void {
         type,
         git: gitRef,
         path: repoPath,
-        default_branch: defaultBranch,
         description,
       };
 
@@ -207,28 +151,15 @@ export function registerRepoCommand(program: Command): void {
 
   repo
     .command('remove <name>')
-    .description('Remove a repository from the workspace')
+    .description('Remove a repository from the workspace registry')
     .action(async (name: string) => {
       const root = findWorkspaceRoot();
       const config = readConfig(root);
-      const repoConfig = config.repos.find(r => r.name === name);
-      const referencedBy = listSessions(root)
-        .filter((session) => normalizeSessionState(session, config).repos?.some((binding) => binding.repo === name))
-        .map((session) => session.id);
+      const repoConfig = config.repos.find((r) => r.name === name);
 
       if (!repoConfig) {
         log.error(`Repository "${name}" is not in this workspace.`);
         process.exit(1);
-      }
-
-      if (referencedBy.length > 0) {
-        log.error(`Repository "${name}" is still referenced by sessions: ${referencedBy.join(', ')}`);
-        log.info('Update or remove those session bindings before removing the repo.');
-        process.exit(1);
-      }
-
-      if (!repoConfig) {
-        return; // already checked above, for TS narrowing
       }
 
       const shouldDelete = await confirm({
@@ -248,82 +179,5 @@ export function registerRepoCommand(program: Command): void {
       }
 
       log.success(`Repository "${name}" removed from the workspace.`);
-    });
-
-  repo
-    .command('fetch [repo-name]')
-    .description('Fetch remote refs for one or all repositories')
-    .action(async (repoName?: string) => {
-      const root = findWorkspaceRoot();
-      const config = readConfig(root);
-      const repos = repoName
-        ? config.repos.filter(r => r.name === repoName)
-        : config.repos;
-
-      if (repos.length === 0) {
-        log.warn(repoName ? `Repository "${repoName}" not found.` : 'No repositories in this workspace.');
-        return;
-      }
-
-      for (const repo of repos) {
-        const repoPath = resolveRepoPath(root, repo.path);
-        if (!fs.existsSync(repoPath)) {
-          log.warn(`${repo.name}: local path missing, skipping`);
-          continue;
-        }
-        log.step(`${repo.name}: fetching...`);
-        try {
-          await fetchRemote(repoPath);
-          log.success(`${repo.name}: fetched remote refs`);
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          log.error(`${repo.name}: ${msg}`);
-        }
-      }
-    });
-
-  repo
-    .command('sync [repo-name]')
-    .description('Fast-forward baseline branches only')
-    .action(async (repoName?: string) => {
-      const root = findWorkspaceRoot();
-      const config = readConfig(root);
-      const active = getActiveSession(root);
-      const activeBindings = active ? normalizeSessionState(active, config).repos ?? [] : [];
-
-      const repos = repoName
-        ? config.repos.filter(r => r.name === repoName)
-        : config.repos;
-
-      if (repos.length === 0) {
-        log.warn(repoName ? `Repository "${repoName}" not found.` : 'No repositories in this workspace.');
-        return;
-      }
-
-      for (const repo of repos) {
-        const repoPath = resolveRepoPath(root, repo.path);
-        if (!fs.existsSync(repoPath)) {
-          log.warn(`${repo.name}: local path missing, skipping`);
-          continue;
-        }
-
-        const branch = await getCurrentBranch(repoPath);
-        const isBoundByActiveSession = activeBindings.some((binding) => binding.repo === repo.name);
-        if (branch !== repo.default_branch) {
-          log.error(`${repo.name}: refusing to sync non-baseline branch "${branch}" (baseline: ${repo.default_branch})`);
-          continue;
-        }
-        if (isBoundByActiveSession) {
-          log.error(`${repo.name}: refusing to sync because it is bound by active session "${active?.id}"`);
-          continue;
-        }
-        log.step(`${repo.name} (${branch}): pulling...`);
-        const result = await pullCurrent(repoPath);
-        if (result.success) {
-          log.success(`${repo.name}: ${result.summary}`);
-        } else {
-          log.error(`${repo.name}: ${result.summary}`);
-        }
-      }
     });
 }

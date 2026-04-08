@@ -1,13 +1,13 @@
 # Dojo Runtime Design
 
-This document defines the simplified Dojo runtime model.
+This document defines the current Dojo runtime model.
 
 The design goal is strict:
 
 - fewer concepts
-- fewer fields
-- one clear extension point
-- enough structure for users to iterate on their own
+- fewer moving parts
+- one shared contract for AI tools
+- enough structure for teams to extend locally
 
 The runtime should be understood through only four concepts:
 
@@ -24,10 +24,14 @@ Dojo is not a bundle of prompts.
 
 Dojo is a workspace runtime that:
 
-- switches the workspace root and repo branches by session
+- keeps a registry of repos in `.dojo/config.json`
+- tracks the active session in `.dojo/state.json`
 - renders prompt templates into agent-facing command files
 - resolves artifact references inside templates
-- generates startup/handoff context from artifact plugins
+- generates startup and handoff context from artifact plugins
+
+Dojo MVP does **not** manage Git branch switching.
+Sessions are runtime modes, not Git layouts.
 
 ## 2. Core model
 
@@ -39,9 +43,13 @@ A session owns:
 
 - session id
 - description
-- workspace branch
-- repo branches
+- optional external link
+- timestamps and status
 - session artifact directories
+
+When a session is active, session-scoped commands and session-scoped artifact paths resolve against `.dojo/sessions/<session-id>/`.
+
+When no session is active, Dojo runs in baseline mode.
 
 ### 2.2 Artifact plugin
 
@@ -54,9 +62,7 @@ It defines:
 - artifact description
 - how that artifact should be rendered into `.dojo/context.md`
 
-There is no separate “artifact kind”, “summarizer plugin”, or “context section plugin” concept.
-
-If something wants to participate in context generation, it should be an artifact plugin.
+There is no separate summarizer plugin, context section plugin, or artifact registry layer.
 
 ### 2.3 Template
 
@@ -69,7 +75,7 @@ It may:
 - use runtime placeholders
 - use simple Dojo directives
 
-The runtime should avoid large metadata blocks. The template body should carry most of the structure.
+The runtime intentionally keeps template metadata small.
 
 ### 2.4 Context
 
@@ -79,10 +85,10 @@ It is not a live mirror of every file change during an already-running AI sessio
 
 Its job is to:
 
-- identify the active session
-- identify branch state
+- identify the active session or baseline mode
+- list registered repositories
 - point the AI to the right artifact directories
-- include artifact-rendered context blocks in a deterministic order
+- include artifact-rendered context blocks in deterministic order
 
 ## 3. Canonical locations
 
@@ -106,6 +112,7 @@ Recommended shape:
 ```js
 export default {
   id: 'research',
+  scope: 'session',
   dir: '.dojo/sessions/${session_id}/research',
   description: 'Research notes and technical exploration.',
 
@@ -132,6 +139,7 @@ export default {
 | Field | Meaning |
 |------|---------|
 | `id` | artifact id used by templates and context ordering |
+| `scope` | `workspace`, `session`, or `mixed` |
 | `dir` | artifact directory template; may be `null` for derived artifacts |
 | `renderContext` | function that returns a Markdown block or `null` |
 
@@ -141,17 +149,9 @@ export default {
 |------|---------|
 | `description` | human-readable explanation for template expansion |
 
-### 4.3 Important design rule
-
-The plugin itself should decide how its context block looks.
-
-The runtime should not wrap artifact output in an extra synthetic title/body structure.
-
-This is why the plugin does not need a separate `title` field.
-
 ## 5. Config shape
 
-The runtime config should stay minimal.
+The runtime config stays minimal.
 
 Recommended shape:
 
@@ -183,11 +183,11 @@ Recommended shape:
 - it defines the context render order after the fixed runtime header
 - it also defines the effective artifact plugin call order
 
-If it is omitted, Dojo should use the default built-in order, then append any extra artifact plugins.
+If it is omitted, Dojo uses the built-in default order and then appends any extra artifact plugins.
 
 ## 6. Template syntax
 
-The template syntax should be small and explicit.
+The template syntax is intentionally small.
 
 ### 6.1 Placeholders
 
@@ -197,8 +197,6 @@ Supported placeholders:
 - `${context_path}`
 - `${artifact_dir:<id>}`
 - `${artifact_description:<id>}`
-
-The most common one is `${artifact_dir:<id>}`.
 
 ### 6.2 Session blocks
 
@@ -217,12 +215,6 @@ Templates may declare available artifact context through:
 <dojo_read_block artifacts="research,tasks" />
 ```
 
-At render time, the runtime expands that into a Markdown block containing:
-
-- artifact id
-- resolved directory
-- artifact description
-
 ### 6.4 Write directive
 
 Templates may declare the primary output artifact through:
@@ -231,23 +223,7 @@ Templates may declare the primary output artifact through:
 <dojo_write_block artifact="tech-design" />
 ```
 
-At render time, the runtime expands that into a Markdown block containing:
-
-- artifact id
-- resolved directory
-- artifact description
-
-### 6.5 Why directives instead of large metadata
-
-The runtime should not depend on large `reads/writes` frontmatter blocks.
-
-The body-level directives are:
-
-- easier for humans to read
-- easier for runtime to expand
-- easier to infer from later if linting is needed
-
-### 6.6 Validation
+### 6.5 Validation
 
 Templates should be validated with:
 
@@ -256,82 +232,4 @@ dojo template lint
 dojo template lint dojo-tech-design
 ```
 
-The runtime should use the same validation path during command materialization.
-
-## 7. Context generation
-
-Context generation has two parts.
-
-### 7.1 Fixed header
-
-The runtime always writes a fixed header that includes:
-
-- active session
-- workspace branch
-- repo branches
-- a reminder that this file is startup/handoff context
-
-### 7.2 Artifact blocks
-
-After the fixed header:
-
-1. Dojo resolves the ordered artifact id list
-2. Dojo loads the corresponding artifact plugins
-3. Dojo resolves each plugin directory
-4. Dojo calls `renderContext()`
-5. Dojo appends the returned Markdown blocks in order
-
-If a plugin returns `null`, the runtime skips it.
-
-## 8. Startup flow
-
-`dojo init` should:
-
-- create `.dojo/artifacts/`
-- install built-in artifact plugins there
-- create `.dojo/commands/`
-- create `.dojo/skills/`
-- install the built-in `dojo-template-authoring` skill
-- create `.dojo/sessions/`
-- create `.agents/commands/`
-- write minimal config
-
-This way the built-in artifacts are already in plugin form, and users can edit them directly.
-
-## 9. Closed loop
-
-The runtime loop should now be understood like this:
-
-1. activate session
-2. switch workspace root and repo branches
-3. render commands from templates
-4. templates write into artifact plugin directories
-5. artifact plugins render context blocks
-6. Dojo writes `.dojo/context.md`
-7. the next AI session continues from that disk-backed state
-
-## 10. Why this design is simpler
-
-This design removes several separate concepts:
-
-- no separate artifact kind registry
-- no separate summarizer plugin concept
-- no separate context plugin pipeline item concept
-- no large `reads/writes` metadata requirement
-
-Instead:
-
-- artifact definition and context expression live in one place
-- template syntax stays small
-- context ordering is a simple ordered artifact id list
-
-That is the runtime shape the code should implement.
-
-## 11. Source asset layout in this repo
-
-For contributors, the built-in assets are intentionally separated:
-
-- `src/starter/commands/` — built-in starter templates
-- `src/starter/workspace/` — starter workspace files
-- `src/builtins/artifacts/` — built-in artifact plugins
-- `src/skills/dojo-template-authoring/` — real skill asset
+The runtime uses the same validation path during command materialization.

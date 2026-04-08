@@ -39,24 +39,12 @@ build_dist() {
   (cd "$ROOT_DIR" && npm run build >/dev/null)
 }
 
-commit_workspace_changes() {
-  local message="$1"
-  git -C "$WORKSPACE_DIR" add -A
-  if git -C "$WORKSPACE_DIR" diff --cached --quiet; then
-    return
-  fi
-  git -C "$WORKSPACE_DIR" commit -m "$message" >/dev/null
-}
-
 prepare_local_repo() {
   mkdir -p "$LOCAL_REPO_DIR"
   git -C "$LOCAL_REPO_DIR" init -b master >/dev/null
   printf '# tty failures\n' > "$LOCAL_REPO_DIR/README.md"
   git -C "$LOCAL_REPO_DIR" add README.md
   git -C "$LOCAL_REPO_DIR" commit -m 'init' >/dev/null
-  git -C "$LOCAL_REPO_DIR" branch develop
-  git -C "$LOCAL_REPO_DIR" branch develop_xx
-  git -C "$LOCAL_REPO_DIR" branch feat/test
 }
 
 run_tty_step() {
@@ -68,20 +56,6 @@ run_tty_step() {
   LOCAL_REPO_DIR="$LOCAL_REPO_DIR" \
   TRANSCRIPTS_DIR="$TRANSCRIPTS_DIR" \
   expect "$EXPECT_DRIVER" "$step"
-}
-
-disable_auto_push() {
-  node -e "
-    const fs = require('node:fs');
-    const path = require('node:path');
-    const configPath = path.join(process.argv[1], '.dojo', 'config.json');
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    config.runtime ??= {};
-    config.runtime.remote ??= {};
-    config.runtime.remote.auto_push_on_session_create = false;
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
-  " "$WORKSPACE_DIR"
-  commit_workspace_changes 'chore: configure failure tty smoke runtime'
 }
 
 run_expect_fail() {
@@ -108,25 +82,26 @@ main() {
   prepare_local_repo
 
   run_tty_step create
-  disable_auto_push
   run_tty_step repo-add
   run_tty_step session-new
 
-  printf '\nroot dirty\n' >> "$WORKSPACE_DIR/AGENTS.md"
-  run_expect_fail root-dirty-block node "$DOJO_BIN" session none
-  assert_contains "$TRANSCRIPTS_DIR/root-dirty-block.txt" "workspace-root: uncommitted changes" 'root dirty block should mention workspace-root'
-  git -C "$WORKSPACE_DIR" checkout -- AGENTS.md
+  run_expect_fail resume-missing node "$DOJO_BIN" session resume missing-session
+  assert_contains "$TRANSCRIPTS_DIR/resume-missing.txt" 'does not exist' 'resume missing should explain that the session does not exist'
 
-  printf '\nrepo dirty\n' >> "$LOCAL_REPO_DIR/README.md"
-  run_expect_fail repo-dirty-block node "$DOJO_BIN" session none
-  assert_contains "$TRANSCRIPTS_DIR/repo-dirty-block.txt" "local-repo: uncommitted changes" 'repo dirty block should mention the repo'
-  git -C "$LOCAL_REPO_DIR" checkout -- README.md
+  run_expect_fail repo-duplicate node "$DOJO_BIN" repo add --local "$LOCAL_REPO_DIR"
+  assert_contains "$TRANSCRIPTS_DIR/repo-duplicate.txt" 'already in this workspace' 'duplicate repo add should be rejected'
 
   (
     cd "$WORKSPACE_DIR"
-    node "$DOJO_BIN" session exit
-  ) > "$TRANSCRIPTS_DIR/session-exit.txt"
-  assert_contains "$TRANSCRIPTS_DIR/session-exit.txt" "Workspace returned to no-session baseline mode." 'session exit alias should switch to no-session mode'
+    node "$DOJO_BIN" session none
+  ) > "$TRANSCRIPTS_DIR/session-none.txt"
+  assert_contains "$TRANSCRIPTS_DIR/session-none.txt" 'baseline runtime mode' 'session none should succeed before task-status failure check'
+
+  run_expect_fail task-without-session node "$DOJO_BIN" task status
+  assert_contains "$TRANSCRIPTS_DIR/task-without-session.txt" 'No active session' 'task status should require an active session'
+
+  run_expect_fail session-status-missing node "$DOJO_BIN" session status missing-session
+  assert_contains "$TRANSCRIPTS_DIR/session-status-missing.txt" 'does not exist' 'session status should reject an unknown session id'
 
   log
   log "tty failure smoke passed"

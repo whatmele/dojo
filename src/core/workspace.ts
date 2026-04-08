@@ -1,8 +1,6 @@
 import path from 'node:path';
 import { DOJO_DIR } from '../types.js';
-import type { WorkspaceConfig, SessionState } from '../types.js';
 import { fileExists } from '../utils/fs.js';
-import { isDirty } from './git.js';
 
 export function findWorkspaceRoot(from?: string): string {
   let dir = from ?? process.cwd();
@@ -34,35 +32,4 @@ export function getTaskDir(root: string, sessionId: string, taskName: string): s
 
 export function resolveRepoPath(root: string, repoPath: string): string {
   return path.isAbsolute(repoPath) ? repoPath : path.join(root, repoPath);
-}
-
-export interface CleanCheckResult {
-  clean: boolean;
-  dirtyRepos: string[];
-}
-
-export async function checkWorkspaceClean(
-  root: string,
-  _session: SessionState | null,
-  config: WorkspaceConfig,
-): Promise<CleanCheckResult> {
-  const dirtyRepos: string[] = [];
-
-  if (await isDirty(root)) {
-    dirtyRepos.push('workspace (root)');
-  }
-
-  for (const repo of config.repos) {
-    const repoPath = resolveRepoPath(root, repo.path);
-    if (!fileExists(repoPath)) continue;
-    try {
-      if (await isDirty(repoPath)) {
-        dirtyRepos.push(repo.name);
-      }
-    } catch {
-      // repo not a git dir, skip
-    }
-  }
-
-  return { clean: dirtyRepos.length === 0, dirtyRepos };
 }

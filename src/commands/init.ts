@@ -7,11 +7,9 @@ import { DOJO_DIR, AGENTS_SKILLS_DIR } from '../types.js';
 import { writeConfig, addRepo } from '../core/config.js';
 import { writeWorkspaceState } from '../core/state.js';
 import {
-  alignRepoToExistingBranch,
   initRepo,
   addAndCommit,
   cloneRepo,
-  getCurrentBranch,
   stagePathsAndCommit,
 } from '../core/git.js';
 import { distributeCommands } from '../core/command-distributor.js';
@@ -20,7 +18,6 @@ import { TOOL_COMMANDS } from './start.js';
 import { ensureDir, writeText, readText, fileExists } from '../utils/fs.js';
 import { log, printBanner } from '../utils/logger.js';
 import { resolveBuiltInArtifactsDir, resolveBuiltInSkillsDir, resolveBuiltInStarterDir } from '../core/builtins.js';
-import { promptBranchName } from './branch-prompts.js';
 
 const AGENT_CHOICES: { name: string; value: AgentTool }[] = [
   { name: 'Claude Code', value: 'claude-code' },
@@ -29,7 +26,6 @@ const AGENT_CHOICES: { name: string; value: AgentTool }[] = [
   { name: 'Trae', value: 'trae' },
 ];
 
-/** 由工作区名称生成磁盘目录名（小写、连字符），用于 create 落盘。 */
 function suggestedDirNameFromWorkspaceName(workspaceName: string): string {
   const s = workspaceName
     .trim()
@@ -41,7 +37,6 @@ function suggestedDirNameFromWorkspaceName(workspaceName: string): string {
   return s || 'dojo-workspace';
 }
 
-/** 禁止 `.` / `..` 等会解析到当前目录或上级目录的片段，避免 init 写到错误路径。 */
 function safeWorkspaceDirSegment(workspaceName: string): string {
   const segment = suggestedDirNameFromWorkspaceName(workspaceName);
   if (segment === '.' || segment === '..' || segment.includes(path.sep)) {
@@ -99,7 +94,6 @@ async function applyInit(
   root: string,
   name: string,
   description: string,
-  defaultBranch: string,
   agents: AgentTool[],
   agent_commands?: Partial<Record<AgentTool, string>>,
 ): Promise<void> {
@@ -127,17 +121,6 @@ async function applyInit(
     context: {
       artifacts: ['product-requirement', 'research', 'tech-design', 'tasks', 'workspace-doc'],
     },
-    runtime: {
-      workspace_root: {
-        default_branch: defaultBranch,
-      },
-      switch_guard: {
-        clean_policy: 'all-registered',
-      },
-      remote: {
-        auto_push_on_session_create: true,
-      },
-    },
   };
   writeConfig(root, config);
 
@@ -156,20 +139,18 @@ async function applyInit(
   const targetSkillsDir = path.join(dojoDir, 'skills');
   const targetTypesDir = path.join(dojoDir, 'types');
 
-  const templateFiles = fs.readdirSync(commandsTemplateDir).filter(f => f.endsWith('.md'));
+  const templateFiles = fs.readdirSync(commandsTemplateDir).filter((f) => f.endsWith('.md'));
   if (templateFiles.length === 0) {
     throw new Error(`Command template directory is empty: ${commandsTemplateDir}`);
   }
   for (const file of templateFiles) {
-    const content = readText(path.join(commandsTemplateDir, file));
-    writeText(path.join(targetCommandsDir, file), content);
+    writeText(path.join(targetCommandsDir, file), readText(path.join(commandsTemplateDir, file)));
   }
 
   if (fs.existsSync(artifactsTemplateDir)) {
-    const artifactFiles = fs.readdirSync(artifactsTemplateDir).filter(f => /\.(js|mjs|ts|mts)$/.test(f));
+    const artifactFiles = fs.readdirSync(artifactsTemplateDir).filter((f) => /\.(js|mjs|ts|mts)$/.test(f));
     for (const file of artifactFiles) {
-      const content = readText(path.join(artifactsTemplateDir, file));
-      writeText(path.join(targetArtifactsDir, file), content);
+      writeText(path.join(targetArtifactsDir, file), readText(path.join(artifactsTemplateDir, file)));
     }
   }
 
@@ -194,7 +175,7 @@ async function applyInit(
 
   log.step('Initializing Git repository...');
   if (!fileExists(path.join(root, '.git'))) {
-    await initRepo(root, defaultBranch);
+    await initRepo(root);
   }
   await addAndCommit(root, 'chore: init dojo workspace');
 }
@@ -205,7 +186,7 @@ async function autoCommitWorkspaceConfig(root: string, message: string): Promise
   } catch (error: unknown) {
     const detail = error instanceof Error ? error.message : String(error);
     log.warn(`Repository was registered, but Dojo could not auto-commit .dojo/config.json: ${detail}`);
-    log.warn('Run `git status` and commit the workspace config before switching sessions.');
+    log.warn('Run `git status` if you want to review and commit the updated workspace config.');
   }
 }
 
@@ -232,20 +213,11 @@ async function promptOptionalRepos(root: string): Promise<void> {
     log.step(`Cloning ${repoName}...`);
     try {
       await cloneRepo(gitUrl, fullPath);
-      const detectedDefaultBranch = await getCurrentBranch(fullPath).catch(() => 'main');
-      const defaultBranch = await promptBranchName(`Default branch for ${repoName}`, {
-        defaultValue: detectedDefaultBranch,
-        repoPath: fullPath,
-        requireExisting: true,
-        missingMessage: 'Choose an existing local or remote branch for the repository baseline',
-      });
-      await alignRepoToExistingBranch(fullPath, defaultBranch);
       const repoConfig: RepoConfig = {
         name: repoName,
         type: repoType,
         git: gitUrl,
         path: repoPath,
-        default_branch: defaultBranch,
         description: repoDesc,
       };
       addRepo(root, repoConfig);
@@ -261,11 +233,9 @@ async function promptOptionalRepos(root: string): Promise<void> {
   }
 }
 
-/** 生成可复制的 cd 命令：优先相对路径，含空格时加引号。 */
 function formatCdIntoWorkspace(fromCwd: string, workspaceRoot: string): string {
   const rel = path.relative(fromCwd, workspaceRoot);
-  const usePath =
-    rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : workspaceRoot;
+  const usePath = rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : workspaceRoot;
   return /\s/.test(usePath) ? `cd "${usePath.replace(/"/g, '\\"')}"` : `cd ${usePath}`;
 }
 
@@ -281,7 +251,7 @@ function printNextSteps(options?: { workspaceRoot: string }): void {
       log.info(`  ${cdCmd}  — then run:`);
     }
   }
-  log.info('  dojo session new  — create a dev session');
+  log.info('  dojo session new  — create a Dojo work session');
   log.info('  dojo start        — launch your AI tool');
 }
 
@@ -295,12 +265,8 @@ async function doInit(root: string): Promise<void> {
   console.log();
 
   const { name, description } = await promptWorkspaceProfile(path.basename(root));
-  const defaultBranch = await promptBranchName('Workspace baseline branch', {
-    defaultValue: await getCurrentBranch(root).catch(() => 'main'),
-    repoPath: fileExists(path.join(root, '.git')) ? root : undefined,
-  });
   const { agents, agent_commands } = await promptAgentPreferences();
-  await applyInit(root, name, description, defaultBranch, agents, agent_commands);
+  await applyInit(root, name, description, agents, agent_commands);
 
   const absRoot = path.resolve(root);
   log.success(`Workspace "${name}" initialized.`);
@@ -311,10 +277,6 @@ async function doInit(root: string): Promise<void> {
   printNextSteps({ workspaceRoot: root });
 }
 
-/**
- * 与 init 相同的问答顺序；区别：名称无默认值（由用户输入或 CLI 传入）。
- * 磁盘目录在 applyInit 时创建，避免交互中途退出留下无 .dojo 的空文件夹。
- */
 async function doCreate(cliNameArg?: string): Promise<void> {
   printBanner();
   console.log();
@@ -345,11 +307,8 @@ async function doCreate(cliNameArg?: string): Promise<void> {
   }
 
   const description = await input({ message: 'Workspace description:' });
-  const defaultBranch = await promptBranchName('Workspace baseline branch', {
-    defaultValue: 'main',
-  });
   const { agents, agent_commands } = await promptAgentPreferences();
-  await applyInit(targetDir, name, description, defaultBranch, agents, agent_commands);
+  await applyInit(targetDir, name, description, agents, agent_commands);
 
   const absTarget = path.resolve(targetDir);
   log.success(`Workspace "${name}" initialized.`);

@@ -63,7 +63,6 @@ describe('config', () => {
       type: 'biz',
       git: 'git@example.com:org/svc-a.git',
       path: 'repos/biz/svc-a',
-      default_branch: 'main',
       description: 'Service A',
     };
     addRepo(tmpDir, repo);
@@ -77,7 +76,7 @@ describe('config', () => {
       ...baseConfig,
       repos: [{
         name: 'svc-a', type: 'biz' as const, git: 'x', path: 'y',
-        default_branch: 'main', description: '',
+        description: '',
       }],
     };
     writeTestConfig(tmpDir, configWithRepo);
@@ -89,7 +88,7 @@ describe('config', () => {
       ...baseConfig,
       repos: [{
         name: 'svc-a', type: 'biz' as const, git: 'x', path: 'y',
-        default_branch: 'main', description: '',
+        description: '',
       }],
     };
     writeTestConfig(tmpDir, configWithRepo);

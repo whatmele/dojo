@@ -76,33 +76,6 @@ prepare_local_repos() {
   prepare_local_repo "$REPO_C_DIR" "repo-c"
 }
 
-run_tty_step() {
-  local step="$1"
-  log "running tty step: $step"
-  ROOT_DIR="$ROOT_DIR" \
-  SMOKE_DIR="$SMOKE_DIR" \
-  WORKSPACE_DIR="$WORKSPACE_DIR" \
-  TRANSCRIPTS_DIR="$TRANSCRIPTS_DIR" \
-  REPO_A_DIR="$REPO_A_DIR" \
-  REPO_B_DIR="$REPO_B_DIR" \
-  REPO_C_DIR="$REPO_C_DIR" \
-  expect "$EXPECT_DRIVER" "$step"
-}
-
-disable_auto_push() {
-  node -e "
-    const fs = require('node:fs');
-    const path = require('node:path');
-    const configPath = path.join(process.argv[1], '.dojo', 'config.json');
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    config.runtime ??= {};
-    config.runtime.remote ??= {};
-    config.runtime.remote.auto_push_on_session_create = false;
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
-  " "$WORKSPACE_DIR"
-  commit_workspace_changes 'chore: configure multi tty smoke runtime'
-}
-
 register_repo() {
   local repo_name="$1"
   local repo_path="$2"
@@ -118,18 +91,30 @@ register_repo() {
       type: 'biz',
       git: 'local:' + repoPath,
       path: repoPath,
-      default_branch: 'master',
       description: repoName,
     });
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
   " "$WORKSPACE_DIR" "$repo_name" "$repo_path"
-  commit_workspace_changes "chore: register repository $repo_name"
 }
 
 register_local_repos() {
   register_repo "repo-a" "$REPO_A_DIR"
   register_repo "repo-b" "$REPO_B_DIR"
   register_repo "repo-c" "$REPO_C_DIR"
+  commit_workspace_changes 'chore: register multi smoke repositories'
+}
+
+run_tty_step() {
+  local step="$1"
+  log "running tty step: $step"
+  ROOT_DIR="$ROOT_DIR" \
+  SMOKE_DIR="$SMOKE_DIR" \
+  WORKSPACE_DIR="$WORKSPACE_DIR" \
+  TRANSCRIPTS_DIR="$TRANSCRIPTS_DIR" \
+  REPO_A_DIR="$REPO_A_DIR" \
+  REPO_B_DIR="$REPO_B_DIR" \
+  REPO_C_DIR="$REPO_C_DIR" \
+  expect "$EXPECT_DRIVER" "$step"
 }
 
 capture_workspace_snapshot() {
@@ -137,8 +122,15 @@ capture_workspace_snapshot() {
 
   (
     cd "$WORKSPACE_DIR"
+    node "$DOJO_BIN" context reload >/dev/null
+  )
+
+  (
+    cd "$WORKSPACE_DIR"
     node "$DOJO_BIN" status
   ) > "$TRANSCRIPTS_DIR/${prefix}-status.txt"
+
+  cp "$WORKSPACE_DIR/.dojo/context.md" "$TRANSCRIPTS_DIR/${prefix}-context.md"
 
   git -C "$WORKSPACE_DIR" branch --show-current > "$TRANSCRIPTS_DIR/${prefix}-root-branch.txt"
   git -C "$REPO_A_DIR" branch --show-current > "$TRANSCRIPTS_DIR/${prefix}-repo-a-branch.txt"
@@ -149,38 +141,35 @@ capture_workspace_snapshot() {
 verify_after_repo_registration() {
   assert_git_clean "$WORKSPACE_DIR" 'workspace should stay clean after repo auto-commits'
   capture_workspace_snapshot "baseline"
-  assert_contains "$TRANSCRIPTS_DIR/baseline-status.txt" "No active session (baseline mode)" 'baseline status should show no active session'
-  assert_contains "$TRANSCRIPTS_DIR/baseline-root-branch.txt" "main" 'root should stay on main before sessions'
-  assert_contains "$TRANSCRIPTS_DIR/baseline-repo-a-branch.txt" "master" 'repo-a should stay on baseline master'
-  assert_contains "$TRANSCRIPTS_DIR/baseline-repo-b-branch.txt" "master" 'repo-b should stay on baseline master'
-  assert_contains "$TRANSCRIPTS_DIR/baseline-repo-c-branch.txt" "master" 'repo-c should stay on baseline master'
+  assert_contains "$TRANSCRIPTS_DIR/baseline-status.txt" 'Mode: baseline' 'baseline status should show baseline mode'
+  assert_contains "$TRANSCRIPTS_DIR/baseline-status.txt" 'repo-a' 'status should include repo-a'
+  assert_contains "$TRANSCRIPTS_DIR/baseline-status.txt" 'repo-b' 'status should include repo-b'
+  assert_contains "$TRANSCRIPTS_DIR/baseline-status.txt" 'repo-c' 'status should include repo-c'
+  assert_contains "$TRANSCRIPTS_DIR/baseline-root-branch.txt" 'main' 'root branch should remain main'
+  assert_contains "$TRANSCRIPTS_DIR/baseline-repo-a-branch.txt" 'master' 'repo-a branch should remain master'
+  assert_contains "$TRANSCRIPTS_DIR/baseline-repo-b-branch.txt" 'master' 'repo-b branch should remain master'
+  assert_contains "$TRANSCRIPTS_DIR/baseline-repo-c-branch.txt" 'master' 'repo-c branch should remain master'
 }
 
 verify_after_session_a() {
   capture_workspace_snapshot "session-a"
-  assert_contains "$TRANSCRIPTS_DIR/session-a-status.txt" "Active session \"session-a\"" 'status should show session-a active'
-  assert_contains "$TRANSCRIPTS_DIR/session-a-root-branch.txt" "feature/session-a-root" 'root should switch to session-a root branch'
-  assert_contains "$TRANSCRIPTS_DIR/session-a-repo-a-branch.txt" "feature/session-a-repo-a" 'repo-a should switch into session-a branch'
-  assert_contains "$TRANSCRIPTS_DIR/session-a-repo-b-branch.txt" "feature/session-a-repo-b" 'repo-b should switch into session-a branch'
-  assert_contains "$TRANSCRIPTS_DIR/session-a-repo-c-branch.txt" "master" 'repo-c should stay on baseline during session-a'
+  assert_contains "$TRANSCRIPTS_DIR/session-a-status.txt" 'Active session: session-a' 'status should show session-a active'
+  assert_contains "$TRANSCRIPTS_DIR/session-a-context.md" '.dojo/sessions/session-a/' 'context should point at session-a artifacts'
+  assert_contains "$TRANSCRIPTS_DIR/session-a-root-branch.txt" 'main' 'root branch should stay main in MVP mode'
 }
 
 verify_after_session_b() {
   capture_workspace_snapshot "session-b"
-  assert_contains "$TRANSCRIPTS_DIR/session-b-status.txt" "Active session \"session-b\"" 'status should show session-b active'
-  assert_contains "$TRANSCRIPTS_DIR/session-b-root-branch.txt" "feature/session-b-root" 'root should switch to session-b root branch'
-  assert_contains "$TRANSCRIPTS_DIR/session-b-repo-a-branch.txt" "master" 'repo-a should return to baseline during session-b'
-  assert_contains "$TRANSCRIPTS_DIR/session-b-repo-b-branch.txt" "feature/session-b-repo-b" 'repo-b should switch into session-b branch'
-  assert_contains "$TRANSCRIPTS_DIR/session-b-repo-c-branch.txt" "feature/session-b-repo-c" 'repo-c should switch into session-b branch'
+  assert_contains "$TRANSCRIPTS_DIR/session-b-status.txt" 'Active session: session-b' 'status should show session-b active'
+  assert_contains "$TRANSCRIPTS_DIR/session-b-context.md" '.dojo/sessions/session-b/' 'context should point at session-b artifacts'
+  assert_contains "$TRANSCRIPTS_DIR/session-b-root-branch.txt" 'main' 'root branch should still stay main in MVP mode'
 }
 
 verify_after_resume_a() {
   capture_workspace_snapshot "resumed-a"
-  assert_contains "$TRANSCRIPTS_DIR/resumed-a-status.txt" "Active session \"session-a\"" 'status should show session-a active again'
-  assert_contains "$TRANSCRIPTS_DIR/resumed-a-root-branch.txt" "feature/session-a-root" 'root should switch back to session-a root branch'
-  assert_contains "$TRANSCRIPTS_DIR/resumed-a-repo-a-branch.txt" "feature/session-a-repo-a" 'repo-a should switch back into session-a branch'
-  assert_contains "$TRANSCRIPTS_DIR/resumed-a-repo-b-branch.txt" "feature/session-a-repo-b" 'repo-b should switch back into session-a branch'
-  assert_contains "$TRANSCRIPTS_DIR/resumed-a-repo-c-branch.txt" "master" 'repo-c should return to baseline when resuming session-a'
+  assert_contains "$TRANSCRIPTS_DIR/resumed-a-status.txt" 'Active session: session-a' 'status should show session-a active again'
+  assert_contains "$TRANSCRIPTS_DIR/resumed-a-context.md" '.dojo/sessions/session-a/' 'context should point back at session-a artifacts'
+  assert_contains "$TRANSCRIPTS_DIR/resumed-a-root-branch.txt" 'main' 'root branch should still stay main after resume'
 }
 
 main() {
@@ -189,7 +178,6 @@ main() {
   prepare_local_repos
 
   run_tty_step create
-  disable_auto_push
   register_local_repos
   verify_after_repo_registration
 

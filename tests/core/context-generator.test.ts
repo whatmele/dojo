@@ -11,7 +11,7 @@ const testConfig: WorkspaceConfig = {
   workspace: { name: 'test', description: 'test' },
   agents: ['claude-code'],
   repos: [
-    { name: 'svc-a', type: 'biz', git: 'x', path: 'repos/biz/svc-a', default_branch: 'main', description: 'A' },
+    { name: 'svc-a', type: 'biz', git: 'x', path: 'repos/biz/svc-a', description: 'A' },
   ],
 };
 
@@ -21,8 +21,6 @@ const testSession: SessionState = {
   external_link: 'https://example.com/issue/1',
   created_at: '2026-04-04T10:00:00Z',
   status: 'active',
-  workspace_branch: 'feature/my-session',
-  repo_branches: { 'svc-a': 'feature/my-session' },
 };
 
 beforeEach(() => {
@@ -44,9 +42,9 @@ describe('buildContextMarkdown', () => {
     expect(md).toContain('用户认证重构');
     expect(md).toContain('my-session');
     expect(md).toContain('active');
-    expect(md).toContain('feature/my-session');
     expect(md).toContain('svc-a');
     expect(md).toContain('Startup and handoff context');
+    expect(md).toContain('Artifact root: .dojo/sessions/my-session/');
   });
 
   it('includes PRD files in index', async () => {

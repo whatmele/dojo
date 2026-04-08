@@ -9,7 +9,7 @@ Dojo is a **workspace runtime for AI coding**, not an agent.
 It gives AI tools one shared contract for:
 
 - multi-repo workspaces
-- session switching
+- session-aware runtime mode switching
 - artifact-aware prompt templates
 - startup/handoff context generation
 - local authoring guidance through a real skill asset that is synced into supported tool skill directories
@@ -28,13 +28,12 @@ At runtime, the loop is:
 1. a workspace is initialized under `.dojo/`
 2. repos are registered in `.dojo/config.json`
 3. a session becomes active
-4. Dojo switches the workspace root branch and the participating repo branches together
-5. Dojo renders `.dojo/commands/*.md` into `.agents/commands/*.md`
-6. Dojo materializes `.dojo/skills/*/SKILL.md` into `.agents/skill/*.md` and symlinks supported tool skill dirs such as `.claude/skills/`
-7. the AI tool runs one of those templates
-8. the template reads or writes artifact ids such as `research` or `tech-design`
-9. artifact plugins under `.dojo/artifacts/*.{ts,js}` define where those artifacts live and how they appear in `.dojo/context.md`
-10. `dojo context reload` or `dojo start` regenerates startup/handoff context for the next run
+4. Dojo renders `.dojo/commands/*.md` into `.agents/commands/*.md`
+5. Dojo materializes `.dojo/skills/*/SKILL.md` into `.agents/skills/<skill-id>/SKILL.md` and symlinks supported tool skill dirs such as `.claude/skills/`
+6. the AI tool runs one of those templates
+7. the template reads or writes artifact ids such as `research` or `tech-design`
+8. artifact plugins under `.dojo/artifacts/*.{ts,js}` define where those artifacts live and how they appear in `.dojo/context.md`
+9. `dojo context reload` or `dojo start` regenerates startup/handoff context for the next run
 
 The important rule is that **context is startup/handoff state, not a live mirror of every file change inside an already-running AI session**.
 
@@ -128,7 +127,7 @@ The real authoring skill lives in:
 
 - `.dojo/skills/dojo-template-authoring/SKILL.md`
 
-When supported tools are enabled, Dojo also symlinks the materialized skill file into tool-specific locations such as `.claude/skills/dojo-template-authoring.md`.
+When supported tools are enabled, Dojo also symlinks the materialized skill file into tool-specific locations such as `.claude/skills/dojo-template-authoring/SKILL.md`.
 
 ## Commands contributors should know
 

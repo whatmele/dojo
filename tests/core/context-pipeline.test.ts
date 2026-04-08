@@ -12,8 +12,6 @@ const baseSession: SessionState = {
   description: 'Context artifact verification',
   created_at: '2026-04-07T00:00:00Z',
   status: 'active',
-  workspace_branch: 'feature/ctx-session',
-  repo_branches: {},
 };
 
 function makeConfig(context?: WorkspaceConfig['context']): WorkspaceConfig {
