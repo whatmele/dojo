@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { DOJO_DIR } from '../types.js';
 import type {
   ArtifactPlugin,
@@ -73,13 +74,57 @@ function sanitizeArtifactPlugin(mod: unknown, sourceLabel: string): ArtifactPlug
 
 async function importArtifactPlugin(filePath: string): Promise<ArtifactPlugin> {
   const stat = fs.statSync(filePath);
+  const require = createRequire(import.meta.url);
+  const loadFromPath = async (candidatePath: string): Promise<ArtifactPlugin> => {
+    const candidateStat = fs.statSync(candidatePath);
+    const moduleUrl = `${pathToFileURL(candidatePath).href}?mtime=${stat.mtimeMs}-${candidateStat.mtimeMs}`;
+    const mod = await import(moduleUrl);
+    return sanitizeArtifactPlugin(mod.default, filePath);
+  };
+  const loadJsAsEsmSource = async (): Promise<ArtifactPlugin> => {
+    const source = fs.readFileSync(filePath, 'utf8');
+    const moduleBody = [
+      source,
+      `\n//# sourceURL=${pathToFileURL(filePath).href}`,
+      `\n// dojo-mtime:${stat.mtimeMs}`,
+    ].join('');
+    const moduleUrl = `data:text/javascript;base64,${Buffer.from(moduleBody, 'utf8').toString('base64')}`;
+    const mod = await import(moduleUrl);
+    return sanitizeArtifactPlugin(mod.default, filePath);
+  };
+  const loadJsAsCjs = (): ArtifactPlugin => {
+    const resolved = require.resolve(filePath);
+    delete require.cache[resolved];
+    const loaded = require(resolved) as unknown;
+    const candidate = (
+      loaded
+      && typeof loaded === 'object'
+      && 'default' in (loaded as Record<string, unknown>)
+    )
+      ? (loaded as Record<string, unknown>).default
+      : loaded;
+    return sanitizeArtifactPlugin(candidate, filePath);
+  };
+
   const effectivePath = /\.(ts|mts)$/i.test(filePath)
     ? await transpileTypeScriptPlugin(filePath)
     : filePath;
-  const effectiveStat = fs.statSync(effectivePath);
-  const moduleUrl = `${pathToFileURL(effectivePath).href}?mtime=${stat.mtimeMs}-${effectiveStat.mtimeMs}`;
-  const mod = await import(moduleUrl);
-  return sanitizeArtifactPlugin(mod.default, filePath);
+
+  if (/\.js$/i.test(filePath)) {
+    try {
+      // Treat `.js` plugins as ESM first, independent of ambient package.json
+      // module type, so behavior is consistent across different workspaces.
+      return await loadJsAsEsmSource();
+    } catch (error) {
+      // Backward compatibility: allow CommonJS `.js` plugins as well.
+      if (error instanceof ReferenceError || error instanceof TypeError || error instanceof SyntaxError) {
+        return loadJsAsCjs();
+      }
+      throw error;
+    }
+  }
+
+  return await loadFromPath(effectivePath);
 }
 
 async function loadArtifactPluginsFromDir(dirPath: string): Promise<Record<string, ArtifactPlugin>> {

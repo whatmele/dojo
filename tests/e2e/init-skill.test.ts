@@ -93,7 +93,7 @@ describe('dojo init starter provisioning', () => {
     await program.parseAsync(['node', 'dojo', 'init']);
 
     expect(fs.existsSync(path.join(tmpDir, '.dojo', 'commands', 'dojo-prd.md'))).toBe(true);
-    expect(fs.existsSync(path.join(tmpDir, '.dojo', 'artifacts', 'product-requirement.js'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.dojo', 'artifacts', 'product-requirement.mjs'))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, '.dojo', 'skills', 'dojo-template-authoring', 'SKILL.md'))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, '.dojo', 'types', 'dojo-artifact-plugin.d.ts'))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, '.agents', 'commands', 'dojo-prd.md'))).toBe(false);

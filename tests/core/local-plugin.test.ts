@@ -157,4 +157,22 @@ describe('artifact plugins', () => {
 
     expect(md.indexOf('## First Plugin')).toBeLessThan(md.indexOf('## Second Plugin'));
   });
+
+  it('PLG-07 supports CommonJS workspace-local .js plugins', async () => {
+    writeArtifact('cjs-plugin.js', `module.exports = {
+      id: 'cjs-plugin',
+      scope: 'workspace',
+      dir: null,
+      async renderContext() {
+        return '## CJS Plugin\\n\\n- Works';
+      },
+    };`);
+
+    const md = await buildContextMarkdown(tmpDir, session, makeConfig({
+      artifacts: ['cjs-plugin'],
+    }));
+
+    expect(md).toContain('## CJS Plugin');
+    expect(md).toContain('- Works');
+  });
 });

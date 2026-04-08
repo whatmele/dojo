@@ -169,7 +169,10 @@ async function applyInit(
     const artifactFiles = fs.readdirSync(artifactsTemplateDir).filter(f => /\.(js|mjs|ts|mts)$/.test(f));
     for (const file of artifactFiles) {
       const content = readText(path.join(artifactsTemplateDir, file));
-      writeText(path.join(targetArtifactsDir, file), content);
+      const targetFile = file.endsWith('.js')
+        ? file.replace(/\.js$/i, '.mjs')
+        : file;
+      writeText(path.join(targetArtifactsDir, targetFile), content);
     }
   }
 
