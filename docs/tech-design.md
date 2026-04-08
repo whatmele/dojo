@@ -87,7 +87,19 @@ Each repo entry contains:
 
 `dojo repo add` may clone a remote repo or register a local repo path, but Dojo does not try to align or validate branches.
 
-## 5. Command rendering model
+## 5. Plugin loading model
+
+Artifact plugins may be authored in `.ts`, `.mts`, `.js`, or `.mjs`.
+
+To avoid Node ESM inconsistencies across different devices and workspace setups, Dojo normalizes plugin source into cached `.mjs` modules before dynamic import.
+
+That means:
+
+- TypeScript plugins are transpiled into cached `.mjs`
+- JavaScript plugins are copied into cached `.mjs`
+- workspace-local `.js` plugins do not rely on the workspace having `package.json { "type": "module" }`
+
+## 6. Command rendering model
 
 Template source files live under `.dojo/commands/`.
 
@@ -104,7 +116,7 @@ Rendering flow:
 
 `$ARGUMENTS` is preserved untouched.
 
-## 6. Context generation model
+## 7. Context generation model
 
 `.dojo/context.md` is generated from:
 
@@ -127,7 +139,7 @@ When no session is active:
 - workspace and mixed-scope artifacts may still render
 - session placeholders use the internal `baseline` token when needed for no-session expansion
 
-## 7. Skill provisioning model
+## 8. Skill provisioning model
 
 `dojo init` provisions the real authoring skill into the workspace:
 
@@ -136,7 +148,7 @@ When no session is active:
 - materialized path: `.agents/skills/dojo-template-authoring/SKILL.md`
 - tool link example: `.claude/skills/dojo-template-authoring/SKILL.md`
 
-## 8. Start behavior
+## 9. Start behavior
 
 `dojo start` does exactly this:
 
@@ -147,7 +159,7 @@ When no session is active:
 
 It deliberately does not gate on branch state.
 
-## 9. Status behavior
+## 10. Status behavior
 
 `dojo status` is now a runtime overview, not a Git alignment dashboard.
 
@@ -162,7 +174,7 @@ It shows:
 
 `dojo session status` shows one session's metadata and task summary.
 
-## 10. Deliberate simplifications
+## 11. Deliberate simplifications
 
 The current runtime deliberately avoids:
 

@@ -71,15 +71,41 @@ function sanitizeArtifactPlugin(mod: unknown, sourceLabel: string): ArtifactPlug
   return plugin as ArtifactPlugin;
 }
 
+function cachedPluginModulePath(filePath: string, sourceMtimeMs: number): string {
+  const hash = crypto
+    .createHash('sha1')
+    .update(filePath)
+    .update(String(sourceMtimeMs))
+    .digest('hex')
+    .slice(0, 12);
+  const cacheDir = path.join(os.tmpdir(), 'dojo-artifact-plugin-cache');
+  fs.mkdirSync(cacheDir, { recursive: true });
+  return path.join(cacheDir, `${path.basename(filePath).replace(/\.(ts|mts|js|mjs)$/i, '')}-${hash}.mjs`);
+}
+
+function materializeJavaScriptPlugin(filePath: string): string {
+  const stat = fs.statSync(filePath);
+  const outPath = cachedPluginModulePath(filePath, stat.mtimeMs);
+  fs.writeFileSync(outPath, fs.readFileSync(filePath, 'utf-8'), 'utf-8');
+  return outPath;
+}
+
+function isWorkspaceLocalArtifactPlugin(filePath: string): boolean {
+  const normalized = filePath.split(path.sep).join('/');
+  return normalized.includes(`/${DOJO_DIR}/artifacts/`);
+}
+
 async function importArtifactPlugin(filePath: string): Promise<ArtifactPlugin> {
   const stat = fs.statSync(filePath);
   const effectivePath = /\.(ts|mts)$/i.test(filePath)
     ? await transpileTypeScriptPlugin(filePath)
-    : filePath;
+    : (/\.(js)$/i.test(filePath) && isWorkspaceLocalArtifactPlugin(filePath))
+      ? materializeJavaScriptPlugin(filePath)
+      : filePath;
   const effectiveStat = fs.statSync(effectivePath);
   const moduleUrl = `${pathToFileURL(effectivePath).href}?mtime=${stat.mtimeMs}-${effectiveStat.mtimeMs}`;
   const mod = await import(moduleUrl);
-  return sanitizeArtifactPlugin(mod.default, filePath);
+  return sanitizeArtifactPlugin((mod as { default?: unknown }).default ?? mod, filePath);
 }
 
 async function loadArtifactPluginsFromDir(dirPath: string): Promise<Record<string, ArtifactPlugin>> {
@@ -265,15 +291,7 @@ async function transpileTypeScriptPlugin(filePath: string): Promise<string> {
     fileName: filePath,
   });
 
-  const hash = crypto
-    .createHash('sha1')
-    .update(filePath)
-    .update(String(fs.statSync(filePath).mtimeMs))
-    .digest('hex')
-    .slice(0, 12);
-  const cacheDir = path.join(os.tmpdir(), 'dojo-artifact-plugin-cache');
-  fs.mkdirSync(cacheDir, { recursive: true });
-  const outPath = path.join(cacheDir, `${path.basename(filePath).replace(/\.(ts|mts)$/i, '')}-${hash}.mjs`);
+  const outPath = cachedPluginModulePath(filePath, fs.statSync(filePath).mtimeMs);
   fs.writeFileSync(outPath, result.outputText, 'utf-8');
   return outPath;
 }

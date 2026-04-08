@@ -159,4 +159,28 @@ describe('protocol config and template contracts', () => {
     await expect(resolveArtifactDirById(tmpDir, baseConfig, 'ts-plan', { sessionId: 'sess-ts' }))
       .resolves.toBe('.dojo/sessions/sess-ts/ts-plan');
   });
+
+  it('CFG-10 normalizes workspace-local JavaScript plugins into cached .mjs modules before import', async () => {
+    writeArtifactPlugin(
+      'cache-check.js',
+      `export default {
+        id: 'cache-check',
+        scope: 'workspace',
+        dir: null,
+        description: 'Cache normalization check.',
+        async renderContext() {
+          return '## Cache Check';
+        },
+      };`,
+    );
+
+    const plugins = await loadArtifactPlugins(tmpDir);
+    const cacheDir = path.join(os.tmpdir(), 'dojo-artifact-plugin-cache');
+    const cachedFiles = fs.existsSync(cacheDir)
+      ? fs.readdirSync(cacheDir).filter((file) => file.startsWith('cache-check-') && file.endsWith('.mjs'))
+      : [];
+
+    expect(plugins['cache-check']).toBeDefined();
+    expect(cachedFiles.length).toBeGreaterThan(0);
+  });
 });
