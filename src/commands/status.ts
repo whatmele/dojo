@@ -38,12 +38,11 @@ function printRepoTable(repos: RepoConfig[]): void {
   }
 
   const rows = [
-    ['Repo', 'Type', 'Path', 'Git', 'Description'],
+    ['Repo', 'Type', 'Path', 'Description'],
     ...repos.map((repo) => [
       repo.name,
       repo.type,
       repo.path,
-      repo.git,
       repo.description?.trim() ? repo.description : '-',
     ]),
   ];
