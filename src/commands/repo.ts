@@ -8,6 +8,7 @@ import { readConfig, addRepo, removeRepo } from '../core/config.js';
 import {
   cloneRepo,
   stagePathsAndCommit,
+  resolveRepositoryGitRef,
 } from '../core/git.js';
 import { fileExists } from '../utils/fs.js';
 import { log } from '../utils/logger.js';
@@ -116,7 +117,7 @@ export function registerRepoCommand(program: Command): void {
       }
 
       const name = path.basename(path.resolve(fullPath));
-      const gitRef = `local:${fullPath}`;
+      const gitRef = await resolveRepositoryGitRef(fullPath);
       const repoPath = repoPathForConfig(root, fullPath);
 
       const existingLocal = config.repos.find((r) => r.name === name);

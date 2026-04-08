@@ -43,8 +43,21 @@ describe('buildContextMarkdown', () => {
     expect(md).toContain('my-session');
     expect(md).toContain('active');
     expect(md).toContain('svc-a');
+    expect(md).toContain('| svc-a | biz | repos/biz/svc-a | x | A |');
     expect(md).toContain('Startup and handoff context');
     expect(md).toContain('Artifact root: .dojo/sessions/my-session/');
+  });
+
+  it('backfills missing repository description for legacy config entries', async () => {
+    const legacyConfig = {
+      ...testConfig,
+      repos: [
+        { name: 'legacy-repo', type: 'dev', git: 'git@example.com:org/legacy.git', path: 'repos/dev/legacy-repo' },
+      ],
+    } as unknown as WorkspaceConfig;
+
+    const md = await buildContextMarkdown(tmpDir, testSession, legacyConfig);
+    expect(md).toContain('| legacy-repo | dev | repos/dev/legacy-repo | git@example.com:org/legacy.git | - |');
   });
 
   it('includes PRD files in index', async () => {
