@@ -241,3 +241,19 @@ export async function stagePathsAndCommit(
   await git.commit(message);
   return true;
 }
+
+export async function resolveRepositoryGitRef(repoPath: string): Promise<string> {
+  const git = simpleGit(repoPath);
+  const remotes = await git.getRemotes(true);
+  const origin = remotes.find((remote) => remote.name === 'origin');
+
+  const candidates = [
+    origin?.refs.fetch,
+    origin?.refs.push,
+    ...remotes.flatMap((remote) => [remote.refs.fetch, remote.refs.push]),
+  ]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+
+  return candidates[0] ?? `local:${repoPath}`;
+}
