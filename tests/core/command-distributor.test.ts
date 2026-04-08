@@ -259,6 +259,31 @@ describe('distributeCommands', () => {
     expect(fs.existsSync(path.join(tmpDir, '.agents', 'commands', 'dojo-prd.md'))).toBe(false);
   });
 
+  it('removes stale tool symlinks when a session-scoped command disappears in no-session mode', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.dojo', 'commands', 'dojo-prd.md'),
+      [
+        '---',
+        'description: PRD command',
+        'argument-hint: [topic]',
+        'scope: session',
+        '---',
+        '',
+        'path ${artifact_dir:custom-doc}',
+      ].join('\n'),
+    );
+
+    const traeLinkFile = path.join(tmpDir, '.trae', 'commands', 'dojo-prd.md');
+
+    await distributeCommands(tmpDir, 'sess-live', ['trae']);
+    expect(fs.lstatSync(traeLinkFile).isSymbolicLink()).toBe(true);
+
+    await distributeCommands(tmpDir, null, ['trae']);
+
+    expect(fs.existsSync(traeLinkFile)).toBe(false);
+    expect(() => fs.lstatSync(traeLinkFile)).toThrow();
+  });
+
   it('does not delete non-dojo command files from .agents/commands', async () => {
     fs.writeFileSync(
       path.join(tmpDir, '.dojo', 'commands', 'dojo-prd.md'),

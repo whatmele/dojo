@@ -90,10 +90,10 @@ function renderHeader(session: SessionState | null, config: WorkspaceConfig): st
 
   if (config.repos.length > 0) {
     lines.push('## Registered repositories');
-    lines.push('| Repo | Type | Path | Git |');
-    lines.push('|------|------|------|-----|');
+    lines.push('| Repo | Type | Path | Git | Description |');
+    lines.push('|------|------|------|-----|-------------|');
     for (const repo of config.repos) {
-      lines.push(`| ${repo.name} | ${repo.type} | ${repo.path} | ${repo.git} |`);
+      lines.push(`| ${repo.name} | ${repo.type} | ${repo.path} | ${repo.git} | ${repo.description?.trim() ? repo.description : '-'} |`);
     }
     lines.push('');
   }
