@@ -73,13 +73,42 @@ function sanitizeArtifactPlugin(mod: unknown, sourceLabel: string): ArtifactPlug
 
 async function importArtifactPlugin(filePath: string): Promise<ArtifactPlugin> {
   const stat = fs.statSync(filePath);
+  const loadFromPath = async (candidatePath: string): Promise<ArtifactPlugin> => {
+    const candidateStat = fs.statSync(candidatePath);
+    const moduleUrl = `${pathToFileURL(candidatePath).href}?mtime=${stat.mtimeMs}-${candidateStat.mtimeMs}`;
+    const mod = await import(moduleUrl);
+    return sanitizeArtifactPlugin(mod.default, filePath);
+  };
+
   const effectivePath = /\.(ts|mts)$/i.test(filePath)
     ? await transpileTypeScriptPlugin(filePath)
     : filePath;
-  const effectiveStat = fs.statSync(effectivePath);
-  const moduleUrl = `${pathToFileURL(effectivePath).href}?mtime=${stat.mtimeMs}-${effectiveStat.mtimeMs}`;
-  const mod = await import(moduleUrl);
-  return sanitizeArtifactPlugin(mod.default, filePath);
+
+  try {
+    return await loadFromPath(effectivePath);
+  } catch (error) {
+    const shouldRetryAsMjs = /\.js$/i.test(filePath) && error instanceof SyntaxError;
+    if (!shouldRetryAsMjs) {
+      throw error;
+    }
+
+    // Workspace-local `.js` plugins are often authored with ESM `export default`.
+    // Outside this package (where `type: module` is unknown), Node may parse
+    // those files as CommonJS and throw a syntax error. Retry by loading an
+    // `.mjs` copy so ESM syntax is interpreted consistently.
+    const source = fs.readFileSync(filePath, 'utf8');
+    const hash = crypto.createHash('sha1').update(filePath).digest('hex').slice(0, 8);
+    const tempPath = path.join(
+      os.tmpdir(),
+      `dojo-plugin-js-${hash}-${process.pid}-${Date.now()}.mjs`,
+    );
+    fs.writeFileSync(tempPath, source);
+    try {
+      return await loadFromPath(tempPath);
+    } finally {
+      fs.rmSync(tempPath, { force: true });
+    }
+  }
 }
 
 async function loadArtifactPluginsFromDir(dirPath: string): Promise<Record<string, ArtifactPlugin>> {

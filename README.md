@@ -162,6 +162,10 @@ That loop is the product.
 | `dojo start` | Verify alignment, refresh runtime state, and launch the selected AI tool |
 | `dojo task status` | Show the active session task overview and actionable tasks |
 
+## Requirements
+
+- Node.js `>=23.5.0 || ^22.13.0 || ^21.7.0 || ^20.12.0` (aligned with `@inquirer/prompts` and `package.json` `engines.node`)
+
 ## Quick start
 
 ```bash
