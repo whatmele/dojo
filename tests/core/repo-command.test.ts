@@ -28,6 +28,7 @@ const { registerRepoCommand } = await import('../../src/commands/repo.js');
 let tmpDir: string;
 let workspaceRoot: string;
 let localRepoRoot: string;
+let remoteRepoRoot: string;
 let originalCwd: string;
 
 describe('repo add', () => {
@@ -35,6 +36,7 @@ describe('repo add', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dojo-repo-add-'));
     workspaceRoot = path.join(tmpDir, 'workspace');
     localRepoRoot = path.join(tmpDir, 'local-repo');
+    remoteRepoRoot = path.join(tmpDir, 'remote-repo.git');
     originalCwd = process.cwd();
 
     fs.mkdirSync(path.join(workspaceRoot, '.dojo'), { recursive: true });
@@ -84,5 +86,19 @@ describe('repo add', () => {
     const config = JSON.parse(fs.readFileSync(path.join(workspaceRoot, '.dojo', 'config.json'), 'utf-8')) as WorkspaceConfig;
     expect(config.repos).toHaveLength(1);
     expect(config.repos[0]?.git).toBe(`local:${localRepoRoot}`);
+  });
+
+  it('uses origin remote URL for local repos when available', async () => {
+    await simpleGit().init(remoteRepoRoot, true);
+    await simpleGit(localRepoRoot).addRemote('origin', remoteRepoRoot);
+
+    const program = new Command();
+    registerRepoCommand(program);
+
+    await program.parseAsync(['node', 'dojo', 'repo', 'add', '--local', localRepoRoot]);
+
+    const config = JSON.parse(fs.readFileSync(path.join(workspaceRoot, '.dojo', 'config.json'), 'utf-8')) as WorkspaceConfig;
+    expect(config.repos).toHaveLength(1);
+    expect(config.repos[0]?.git).toBe(remoteRepoRoot);
   });
 });
