@@ -141,8 +141,12 @@ function migrateLegacyAgentSkillsDir(agentSkillDir: string, agentsSkillsDir: str
 }
 
 function removePathIfExists(targetPath: string): void {
-  if (!fs.existsSync(targetPath)) return;
-  const stat = fs.lstatSync(targetPath);
+  let stat: fs.Stats;
+  try {
+    stat = fs.lstatSync(targetPath);
+  } catch {
+    return;
+  }
   if (stat.isDirectory() && !stat.isSymbolicLink()) {
     fs.rmSync(targetPath, { recursive: true, force: true });
     return;
@@ -188,15 +192,11 @@ export function syncAgentDojoFileSymlinks(root: string, agents: AgentTool[]): vo
     migrateLegacyAgentCommandsDir(agentCmdDir, agentsCommandsDir);
     ensureDir(agentCmdDir);
 
-    const existing = fs.existsSync(agentCmdDir) ? listFiles(agentCmdDir) : [];
+    const existing = fs.existsSync(agentCmdDir) ? fs.readdirSync(agentCmdDir) : [];
     for (const name of existing) {
       if (!name.startsWith('dojo-') || !name.endsWith('.md')) continue;
       if (dojoFiles.includes(name)) continue;
-      try {
-        fs.unlinkSync(path.join(agentCmdDir, name));
-      } catch {
-        /* ignore */
-      }
+      removePathIfExists(path.join(agentCmdDir, name));
     }
 
     for (const file of dojoFiles) {

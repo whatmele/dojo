@@ -39,7 +39,12 @@ function printRepoTable(repos: RepoConfig[]): void {
 
   const rows = [
     ['Repo', 'Type', 'Path', 'Git'],
-    ...repos.map((repo) => [repo.name, repo.type, repo.path, repo.git]),
+    ...repos.map((repo) => [
+      repo.name,
+      repo.type,
+      repo.path,
+      repo.git,
+    ]),
   ];
   const widths = columnWidths(rows);
 
