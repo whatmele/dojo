@@ -284,6 +284,18 @@ describe('distributeCommands', () => {
     expect(() => fs.lstatSync(traeLinkFile)).toThrow();
   });
 
+
+  it('does not create .trae/skills symlinks because Trae reads .agents/skills directly', async () => {
+    const skillDir = path.join(tmpDir, '.dojo', 'skills', 'dojo-template-authoring');
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '# Dojo skill\n');
+
+    await distributeCommands(tmpDir, 'sess-1', ['trae']);
+
+    expect(fs.existsSync(path.join(tmpDir, '.agents', 'skills', 'dojo-template-authoring', 'SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.trae', 'skills'))).toBe(false);
+  });
+
   it('does not delete non-dojo command files from .agents/commands', async () => {
     fs.writeFileSync(
       path.join(tmpDir, '.dojo', 'commands', 'dojo-prd.md'),
