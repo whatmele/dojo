@@ -122,5 +122,4 @@ export const AGENT_COMMAND_DIRS: Partial<Record<AgentTool, string>> = {
 };
 export const AGENT_SKILL_DIRS: Partial<Record<AgentTool, string>> = {
   'claude-code': '.claude/skills',
-  'trae': '.trae/skills',
 };
