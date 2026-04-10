@@ -250,7 +250,28 @@ function printTaskSummary(root: string, sessionId: string): void {
   printField('Actionable now', readyTasks.length > 0 ? previewList(readyTasks, 8) : 'No ready task right now');
 }
 
-function printWorkspaceRuntimeOverview(): void {
+function printSimpleWorkspaceOverview(
+  root: string,
+  repos: RepoConfig[],
+  inventory: RuntimeInventory,
+): void {
+  printSection('Overview');
+  printField(
+    'Commands',
+    `${plural(inventory.visibleCommands.length, 'command')} (${previewList(inventory.visibleCommands)})`,
+  );
+  printField(
+    'Skills',
+    `${plural(inventory.sourceSkills.length, 'skill')} (${previewList(inventory.sourceSkills)})`,
+  );
+  printField(
+    'Repositories',
+    `${plural(repos.length, 'repo')} ${repos.length > 0 ? `(${previewList(repos.map((repo) => repo.name))})` : ''}`.trim(),
+  );
+  printField('Workspace', root);
+}
+
+function printWorkspaceRuntimeOverview(full: boolean): void {
   const root = findWorkspaceRoot();
   const config = readConfig(root);
   const active = getActiveSession(root);
@@ -270,6 +291,11 @@ function printWorkspaceRuntimeOverview(): void {
     badge('SKILLS', `${inventory.materializedSkills.length}/${inventory.sourceSkills.length}`, chalk.bgHex('#fb7185').black),
     badge('RUNTIME', runtimeFresh ? 'FRESH' : 'STALE', runtimeFresh ? chalk.bgGreen.black : chalk.bgRed.white),
   ]);
+
+  if (!full) {
+    printSimpleWorkspaceOverview(root, config.repos, inventory);
+    return;
+  }
 
   printSection('Workspace');
   printField('Root', root);
@@ -367,8 +393,9 @@ export function registerStatusCommand(program: Command): void {
   program
     .command('status')
     .description('Show current runtime overview')
-    .action(() => {
-      printWorkspaceRuntimeOverview();
+    .option('--full', 'Show the full runtime dashboard')
+    .action((options: { full?: boolean }) => {
+      printWorkspaceRuntimeOverview(Boolean(options.full));
     });
 
   const session = program.commands.find((command) => command.name() === 'session');
