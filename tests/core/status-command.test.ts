@@ -77,6 +77,9 @@ afterEach(() => {
 
 describe('status command', () => {
   it('prints a simplified dashboard by default', async () => {
+    writeFile(path.join(tmpDir, '.dojo', 'commands', 'dojo-unrendered.md'), '---\nscope: workspace\n---\nnot rendered');
+    writeFile(path.join(tmpDir, '.dojo', 'skills', 'dojo-source-only', 'SKILL.md'), '# Source only skill\n');
+
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const program = new Command();
     program.name('dojo');
@@ -93,6 +96,8 @@ describe('status command', () => {
     expect(output).toContain('Repositories');
     expect(output).toContain('dojo-gen-doc');
     expect(output).toContain('dojo-template-authoring');
+    expect(output).not.toContain('dojo-unrendered');
+    expect(output).not.toContain('dojo-source-only');
     expect(output).not.toContain('RUNTIME ASSETS');
   });
 

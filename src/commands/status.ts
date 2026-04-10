@@ -258,11 +258,11 @@ function printSimpleWorkspaceOverview(
   printSection('Overview');
   printField(
     'Commands',
-    `${plural(inventory.visibleCommands.length, 'command')} (${previewList(inventory.visibleCommands)})`,
+    `${plural(inventory.materializedCommands.length, 'command')} (${previewList(inventory.materializedCommands)})`,
   );
   printField(
     'Skills',
-    `${plural(inventory.sourceSkills.length, 'skill')} (${previewList(inventory.sourceSkills)})`,
+    `${plural(inventory.materializedSkills.length, 'skill')} (${previewList(inventory.materializedSkills)})`,
   );
   printField(
     'Repositories',
