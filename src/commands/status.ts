@@ -1,11 +1,37 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import chalk from 'chalk';
 import { Command } from 'commander';
-import { findWorkspaceRoot } from '../core/workspace.js';
 import { readConfig } from '../core/config.js';
-import { getActiveSession, listSessions, readSessionState, sessionExists } from '../core/state.js';
+import { getTemplateScope } from '../core/protocol.js';
+import {
+  getActiveSession,
+  listSessions,
+  readSessionState,
+  sessionExists,
+} from '../core/state.js';
 import { buildTaskOverview } from '../core/task-overview.js';
-import type { RepoConfig, SessionState } from '../types.js';
+import { findWorkspaceRoot } from '../core/workspace.js';
+import {
+  AGENTS_COMMANDS_DIR,
+  AGENTS_SKILLS_DIR,
+  AGENT_COMMAND_DIRS,
+  AGENT_SKILL_DIRS,
+} from '../types.js';
+import type { AgentTool, RepoConfig, SessionState } from '../types.js';
+import { fileExists, readText } from '../utils/fs.js';
 import { log } from '../utils/logger.js';
+
+interface RuntimeInventory {
+  sourceCommands: string[];
+  visibleCommands: string[];
+  materializedCommands: string[];
+  sourceSkills: string[];
+  materializedSkills: string[];
+  commandSurfaceFresh: boolean;
+  skillSurfaceFresh: boolean;
+  agentSurfaces: string[];
+}
 
 function pad(value: string, width: number): string {
   return value.padEnd(width, ' ');
@@ -31,9 +57,136 @@ function colorSessionStatus(value: string): string {
   return value;
 }
 
+function friendlyAgentName(agent: AgentTool): string {
+  switch (agent) {
+    case 'claude-code':
+      return 'Claude Code';
+    case 'codex':
+      return 'Codex';
+    case 'cursor':
+      return 'Cursor';
+    case 'trae':
+      return 'Trae';
+    default:
+      return agent;
+  }
+}
+
+function listManagedCommandNames(dirPath: string): string[] {
+  if (!fs.existsSync(dirPath)) return [];
+  return fs.readdirSync(dirPath, { withFileTypes: true })
+    .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && entry.name.startsWith('dojo-') && entry.name.endsWith('.md'))
+    .map((entry) => entry.name.replace(/\.md$/, ''))
+    .sort();
+}
+
+function listSkillNames(dirPath: string): string[] {
+  if (!fs.existsSync(dirPath)) return [];
+  return fs.readdirSync(dirPath, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((id) => fs.existsSync(path.join(dirPath, id, 'SKILL.md')))
+    .sort();
+}
+
+function sameMembers(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  const leftSorted = [...left].sort();
+  const rightSorted = [...right].sort();
+  return leftSorted.every((item, index) => item === rightSorted[index]);
+}
+
+function previewList(items: string[], limit = 6): string {
+  if (items.length === 0) return '-';
+  if (items.length <= limit) return items.join(', ');
+  return `${items.slice(0, limit).join(', ')} +${items.length - limit} more`;
+}
+
+function plural(count: number, singular: string, pluralValue = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : pluralValue}`;
+}
+
+function badge(label: string, value: string, background: (content: string) => string): string {
+  return background(` ${label} ${value} `);
+}
+
+function printTitle(title: string, subtitle?: string): void {
+  console.log(chalk.bold.hex('#ff8a3d')('DOJO RUNTIME DASHBOARD'));
+  console.log(chalk.bold(title));
+  if (subtitle?.trim()) {
+    console.log(chalk.dim(subtitle));
+  }
+}
+
+function printSection(title: string): void {
+  console.log();
+  console.log(chalk.bold.hex('#ff8a3d')(title.toUpperCase()));
+  console.log(chalk.dim('-'.repeat(Math.max(32, title.length + 8))));
+}
+
+function printField(label: string, value: string): void {
+  console.log(`${chalk.dim(pad(label, 18))}${value}`);
+}
+
+function renderStateStrip(values: string[]): void {
+  console.log(values.join('  '));
+}
+
+function collectRuntimeInventory(root: string, sessionId: string | null, agents: AgentTool[]): RuntimeInventory {
+  const commandSourceDir = path.join(root, '.dojo', 'commands');
+  const skillSourceDir = path.join(root, '.dojo', 'skills');
+  const materializedCommandDir = path.join(root, AGENTS_COMMANDS_DIR);
+  const materializedSkillDir = path.join(root, AGENTS_SKILLS_DIR);
+
+  const sourceCommands = fs.existsSync(commandSourceDir)
+    ? fs.readdirSync(commandSourceDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+      .map((entry) => entry.name)
+      .sort()
+    : [];
+
+  const visibleCommands = sourceCommands
+    .filter((fileName) => {
+      const scope = getTemplateScope(readText(path.join(commandSourceDir, fileName)));
+      return !(sessionId === null && scope === 'session');
+    })
+    .map((fileName) => fileName.replace(/\.md$/, ''));
+
+  const materializedCommands = listManagedCommandNames(materializedCommandDir);
+  const sourceSkills = listSkillNames(skillSourceDir);
+  const materializedSkills = listSkillNames(materializedSkillDir);
+
+  const agentSurfaces = agents.map((agent) => {
+    const commandMirrorDir = AGENT_COMMAND_DIRS[agent] ? path.join(root, AGENT_COMMAND_DIRS[agent]!) : null;
+    const skillMirrorDir = AGENT_SKILL_DIRS[agent] ? path.join(root, AGENT_SKILL_DIRS[agent]!) : null;
+    const mirroredCommands = commandMirrorDir ? listManagedCommandNames(commandMirrorDir).length : 0;
+    const mirroredSkills = skillMirrorDir ? listSkillNames(skillMirrorDir).length : 0;
+
+    if (agent === 'claude-code') {
+      return `${friendlyAgentName(agent)} -> ${plural(mirroredCommands, 'command link')}, ${plural(mirroredSkills, 'skill link')}`;
+    }
+    if (agent === 'trae') {
+      return `${friendlyAgentName(agent)} -> ${plural(mirroredCommands, 'command link')}, skills via ${AGENTS_SKILLS_DIR}`;
+    }
+    return `${friendlyAgentName(agent)} -> launched via dojo start (reads workspace runtime)`;
+  });
+
+  return {
+    sourceCommands: sourceCommands.map((fileName) => fileName.replace(/\.md$/, '')),
+    visibleCommands,
+    materializedCommands,
+    sourceSkills,
+    materializedSkills,
+    commandSurfaceFresh: sameMembers(visibleCommands, materializedCommands),
+    skillSurfaceFresh: sameMembers(sourceSkills, materializedSkills),
+    agentSurfaces,
+  };
+}
+
 function printRepoTable(repos: RepoConfig[]): void {
   if (repos.length === 0) {
-    log.warn('No repositories registered yet.');
+    console.log(chalk.yellow('  No repositories registered yet.'));
+    console.log(chalk.dim('  Tip: run `dojo repo add` to register a workspace repo.'));
     return;
   }
 
@@ -57,7 +210,8 @@ function printRepoTable(repos: RepoConfig[]): void {
 
 function printSessionTable(sessions: SessionState[], activeId: string | null): void {
   if (sessions.length === 0) {
-    log.warn('No sessions found.');
+    console.log(chalk.yellow('  No sessions found yet.'));
+    console.log(chalk.dim('  Tip: run `dojo session new` to open your first working thread.'));
     return;
   }
 
@@ -82,16 +236,18 @@ function printSessionTable(sessions: SessionState[], activeId: string | null): v
 function printTaskSummary(root: string, sessionId: string): void {
   const overview = buildTaskOverview(root, sessionId);
   if (overview.items.length === 0) {
-    log.warn('No tasks tracked for the active session yet.');
+    console.log(chalk.yellow('  No tasks tracked for this session yet.'));
+    console.log(chalk.dim('  Tip: run /dojo-task-decompose to create a task manifest.'));
     return;
   }
-  log.info(
-    `Tasks: total=${overview.summary.total} ready=${overview.summary.ready} blocked=${overview.summary.blocked} done=${overview.summary.done} untracked=${overview.summary.untracked}`,
+
+  printField(
+    'Task pulse',
+    `total=${overview.summary.total} ready=${overview.summary.ready} blocked=${overview.summary.blocked} done=${overview.summary.done} untracked=${overview.summary.untracked}`,
   );
-  const readyTasks = overview.items.filter((item) => item.dependency_status === 'ready');
-  if (readyTasks.length > 0) {
-    log.info(`Current actionable tasks: ${readyTasks.map((item) => item.name).join(', ')}`);
-  }
+
+  const readyTasks = overview.items.filter((item) => item.dependency_status === 'ready').map((item) => item.name);
+  printField('Actionable now', readyTasks.length > 0 ? previewList(readyTasks, 8) : 'No ready task right now');
 }
 
 function printWorkspaceRuntimeOverview(): void {
@@ -99,31 +255,84 @@ function printWorkspaceRuntimeOverview(): void {
   const config = readConfig(root);
   const active = getActiveSession(root);
   const sessions = listSessions(root);
+  const inventory = collectRuntimeInventory(root, active?.id ?? null, config.agents);
+  const runtimeFresh = inventory.commandSurfaceFresh && inventory.skillSurfaceFresh;
 
-  log.info(`Workspace "${config.workspace.name}"`);
-  log.info(`Mode: ${active ? 'session' : 'baseline'}`);
-  log.info(`Active session: ${active?.id ?? '-'}`);
-  log.info(`Agents: ${config.agents.join(', ')}`);
-  log.info(`Registered repos: ${config.repos.length}`);
-  log.info(`Sessions: ${sessions.length}`);
-  log.info(`Context path: ${root}/.dojo/context.md`);
+  printTitle(config.workspace.name, config.workspace.description || 'AI workspace runtime overview');
+  console.log();
+  renderStateStrip([
+    badge('MODE', active ? 'SESSION' : 'BASELINE', active ? chalk.bgGreen.black : chalk.bgBlue.black),
+    badge('SESSION', active?.id ?? '-', active ? chalk.bgMagenta.black : chalk.bgWhite.black),
+    badge('AGENTS', String(config.agents.length), chalk.bgCyan.black),
+    badge('REPOS', String(config.repos.length), chalk.bgYellow.black),
+    badge('SESSIONS', String(sessions.length), chalk.bgHex('#f97316').black),
+    badge('COMMANDS', `${inventory.visibleCommands.length}/${inventory.sourceCommands.length}`, chalk.bgHex('#a855f7').black),
+    badge('SKILLS', `${inventory.materializedSkills.length}/${inventory.sourceSkills.length}`, chalk.bgHex('#fb7185').black),
+    badge('RUNTIME', runtimeFresh ? 'FRESH' : 'STALE', runtimeFresh ? chalk.bgGreen.black : chalk.bgRed.white),
+  ]);
+
+  printSection('Workspace');
+  printField('Root', root);
+  printField('Context', path.join(root, '.dojo', 'context.md'));
+  printField('Guide', fileExists(path.join(root, 'AGENTS.md')) ? path.join(root, 'AGENTS.md') : '-');
+  printField('Agents', config.agents.map((agent) => friendlyAgentName(agent)).join(', '));
   if (active) {
-    log.info(`Artifact root: ${root}/.dojo/sessions/${active.id}/`);
+    printField('Artifact root', path.join(root, '.dojo', 'sessions', active.id));
+  } else {
+    printField('Artifact root', path.join(root, '.dojo', 'sessions', 'baseline'));
+  }
+  printField(
+    'Session note',
+    active
+      ? `Session-scoped commands are live for "${active.id}".`
+      : 'Baseline mode is active; session-only commands stay parked until you resume a session.',
+  );
+
+  printSection('Runtime assets');
+  printField(
+    'Command templates',
+    `${plural(inventory.sourceCommands.length, 'template')} in .dojo/commands`,
+  );
+  printField(
+    'Visible now',
+    `${plural(inventory.visibleCommands.length, 'command')} in this mode (${previewList(inventory.visibleCommands)})`,
+  );
+  printField(
+    'Materialized',
+    `${plural(inventory.materializedCommands.length, 'command')} in ${AGENTS_COMMANDS_DIR} (${previewList(inventory.materializedCommands)})`,
+  );
+  printField(
+    'Skill packs',
+    `${plural(inventory.sourceSkills.length, 'skill')} in .dojo/skills (${previewList(inventory.sourceSkills)})`,
+  );
+  printField(
+    'Skill surface',
+    `${plural(inventory.materializedSkills.length, 'skill')} in ${AGENTS_SKILLS_DIR} (${previewList(inventory.materializedSkills)})`,
+  );
+  printField(
+    'Runtime sync',
+    runtimeFresh
+      ? chalk.green('Fresh - rendered surfaces match the current workspace mode.')
+      : chalk.yellow('Needs refresh - run `dojo context reload` or `dojo start`.'),
+  );
+
+  if (inventory.agentSurfaces.length > 0) {
+    printField('Agent mirrors', inventory.agentSurfaces[0]);
+    for (const extra of inventory.agentSurfaces.slice(1)) {
+      printField('', extra);
+    }
   }
 
-  console.log();
-  log.info('Registered repositories');
+  printSection('Repositories');
   printRepoTable(config.repos);
 
-  if (sessions.length > 0) {
-    console.log();
-    log.info('Known sessions');
-    printSessionTable(sessions, active?.id ?? null);
-  }
+  printSection('Sessions');
+  printSessionTable(sessions, active?.id ?? null);
 
   if (active) {
-    console.log();
-    log.info(`Active session "${active.id}"`);
+    printSection('Work pulse');
+    printField('Active session', active.id);
+    printField('Description', active.description);
     printTaskSummary(root, active.id);
   }
 }
@@ -132,17 +341,25 @@ function printSessionDetail(target: SessionState): void {
   const root = findWorkspaceRoot();
   const active = getActiveSession(root);
 
-  log.info(`Session "${target.id}"`);
-  log.info(`Status: ${colorSessionStatus(target.status)}`);
-  log.info(`Description: ${target.description}`);
-  log.info(`Created: ${target.created_at}`);
-  log.info(`Updated: ${target.updated_at ?? target.created_at}`);
-  log.info(`Artifact root: ${root}/.dojo/sessions/${target.id}/`);
-  if (target.external_link) {
-    log.info(`Link: ${target.external_link}`);
-  }
-  log.info(`Active now: ${active?.id === target.id ? 'yes' : 'no'}`);
+  printTitle(`Session ${target.id}`, target.description);
   console.log();
+  renderStateStrip([
+    badge('STATUS', target.status.toUpperCase(), target.status === 'active' ? chalk.bgGreen.black : target.status === 'completed' ? chalk.bgCyan.black : chalk.bgYellow.black),
+    badge('ACTIVE NOW', active?.id === target.id ? 'YES' : 'NO', active?.id === target.id ? chalk.bgGreen.black : chalk.bgWhite.black),
+  ]);
+
+  printSection('Session details');
+  printField('ID', target.id);
+  printField('Status', target.status);
+  printField('Description', target.description);
+  printField('Created', target.created_at);
+  printField('Updated', target.updated_at ?? target.created_at);
+  printField('Artifact root', path.join(root, '.dojo', 'sessions', target.id));
+  if (target.external_link) {
+    printField('Link', target.external_link);
+  }
+
+  printSection('Work pulse');
   printTaskSummary(root, target.id);
 }
 
@@ -163,8 +380,7 @@ export function registerStatusCommand(program: Command): void {
     .action(() => {
       const root = findWorkspaceRoot();
       const active = getActiveSession(root);
-      const sessions = listSessions(root);
-      printSessionTable(sessions, active?.id ?? null);
+      printSessionTable(listSessions(root), active?.id ?? null);
     });
 
   session
