@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { simpleGit } from 'simple-git';
 import { Command } from 'commander';
 import { registerStatusCommand } from '../../src/commands/status.js';
 import { writeConfig } from '../../src/core/config.js';
@@ -154,5 +155,46 @@ describe('status command', () => {
     expect(output).toContain('Active session');
     expect(output).toContain('Actionable now');
     expect(output).toContain('ship-ui');
+  });
+
+  it('shows per-repository git status when --git is provided', async () => {
+    const repoPath = path.join(tmpDir, 'repos', 'dev', 'svc-a');
+    fs.mkdirSync(repoPath, { recursive: true });
+    const git = simpleGit(repoPath);
+    await git.init();
+    await git.addConfig('user.name', 'Dojo Test');
+    await git.addConfig('user.email', 'dojo@example.com');
+    writeFile(path.join(repoPath, 'README.md'), 'hello\n');
+    await git.add('.');
+    await git.commit('init');
+    writeFile(path.join(repoPath, 'README.md'), 'hello\nworld\n');
+    writeFile(path.join(repoPath, 'new-file.txt'), 'new\n');
+
+    writeConfig(tmpDir, {
+      workspace: { name: 'test', description: 'A stylish runtime workspace' },
+      agents: ['claude-code', 'codex'],
+      repos: [{
+        name: 'svc-a',
+        type: 'dev',
+        path: 'repos/dev/svc-a',
+        git: 'git@example.com:org/svc-a.git',
+        description: 'Service A',
+      }],
+    });
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const program = new Command();
+    program.name('dojo');
+    program.command('session');
+    registerStatusCommand(program);
+
+    await program.parseAsync(['node', 'dojo', 'status', '--git']);
+
+    const output = logSpy.mock.calls.map((call) => call.map((value) => String(value)).join(' ')).join('\n');
+    expect(output).toContain('GIT STATUS');
+    expect(output).toContain('svc-a');
+    expect(output).toContain('dirty');
+    expect(output).toContain('changed');
+    expect(output).toContain('untracked');
   });
 });

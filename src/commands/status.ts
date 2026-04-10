@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import chalk from 'chalk';
 import { Command } from 'commander';
+import { simpleGit } from 'simple-git';
 import { readConfig } from '../core/config.js';
 import { getTemplateScope } from '../core/protocol.js';
 import {
@@ -11,7 +12,7 @@ import {
   sessionExists,
 } from '../core/state.js';
 import { buildTaskOverview } from '../core/task-overview.js';
-import { findWorkspaceRoot } from '../core/workspace.js';
+import { findWorkspaceRoot, resolveRepoPath } from '../core/workspace.js';
 import {
   AGENTS_COMMANDS_DIR,
   AGENTS_SKILLS_DIR,
@@ -250,6 +251,61 @@ function printTaskSummary(root: string, sessionId: string): void {
   printField('Actionable now', readyTasks.length > 0 ? previewList(readyTasks, 8) : 'No ready task right now');
 }
 
+function formatGitCounters(staged: number, changed: number, untracked: number): string {
+  const parts: string[] = [];
+  if (staged > 0) parts.push(`${staged} staged`);
+  if (changed > 0) parts.push(`${changed} changed`);
+  if (untracked > 0) parts.push(`${untracked} untracked`);
+  return parts.length > 0 ? parts.join(', ') : 'clean';
+}
+
+async function printGitStatus(root: string, repos: RepoConfig[]): Promise<void> {
+  printSection('Git status');
+  if (repos.length === 0) {
+    console.log(chalk.yellow('  No repositories registered yet.'));
+    console.log(chalk.dim('  Tip: run `dojo repo add` before using `dojo status --git`.'));
+    return;
+  }
+
+  const rows: string[][] = [['Repo', 'Branch', 'State', 'Summary']];
+  for (const repo of repos) {
+    const fullPath = resolveRepoPath(root, repo.path);
+    if (!fs.existsSync(fullPath)) {
+      rows.push([repo.name, '-', chalk.red('missing'), 'repository directory not found']);
+      continue;
+    }
+
+    try {
+      const git = simpleGit(fullPath);
+      const status = await git.status();
+      const staged = status.staged.length;
+      const changed = status.modified.length + status.deleted.length + status.created.length + status.renamed.length;
+      const untracked = status.not_added.length;
+      rows.push([
+        repo.name,
+        status.current || 'HEAD',
+        status.isClean() ? 'clean' : 'dirty',
+        formatGitCounters(staged, changed, untracked),
+      ]);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      rows.push([repo.name, '-', 'error', message]);
+    }
+  }
+
+  const widths = columnWidths(rows);
+  console.log(chalk.bold(renderRow(rows[0], widths)));
+  console.log(chalk.dim(widths.map((width) => '-'.repeat(width)).join('-|-')));
+  for (const row of rows.slice(1)) {
+    const state = row[2] === 'clean'
+      ? chalk.green(row[2])
+      : row[2] === 'dirty'
+        ? chalk.yellow(row[2])
+        : chalk.red(row[2]);
+    console.log(renderRow([row[0], row[1], state, row[3]], widths));
+  }
+}
+
 function printSimpleWorkspaceOverview(
   root: string,
   repos: RepoConfig[],
@@ -271,7 +327,7 @@ function printSimpleWorkspaceOverview(
   printField('Workspace', root);
 }
 
-function printWorkspaceRuntimeOverview(full: boolean): void {
+async function printWorkspaceRuntimeOverview(full: boolean, includeGit: boolean): Promise<void> {
   const root = findWorkspaceRoot();
   const config = readConfig(root);
   const active = getActiveSession(root);
@@ -294,6 +350,9 @@ function printWorkspaceRuntimeOverview(full: boolean): void {
 
   if (!full) {
     printSimpleWorkspaceOverview(root, config.repos, inventory);
+    if (includeGit) {
+      await printGitStatus(root, config.repos);
+    }
     return;
   }
 
@@ -361,6 +420,10 @@ function printWorkspaceRuntimeOverview(full: boolean): void {
     printField('Description', active.description);
     printTaskSummary(root, active.id);
   }
+
+  if (includeGit) {
+    await printGitStatus(root, config.repos);
+  }
 }
 
 function printSessionDetail(target: SessionState): void {
@@ -394,8 +457,9 @@ export function registerStatusCommand(program: Command): void {
     .command('status')
     .description('Show current runtime overview')
     .option('--full', 'Show the full runtime dashboard')
-    .action((options: { full?: boolean }) => {
-      printWorkspaceRuntimeOverview(Boolean(options.full));
+    .option('--git', 'Show git status summary for each registered repository')
+    .action(async (options: { full?: boolean; git?: boolean }) => {
+      await printWorkspaceRuntimeOverview(Boolean(options.full), Boolean(options.git));
     });
 
   const session = program.commands.find((command) => command.name() === 'session');
