@@ -90,6 +90,8 @@ Its job is to:
 - point the AI to the right artifact directories
 - include artifact-rendered context blocks in deterministic order
 
+Repository Git helpers such as `dojo repo status`, `dojo repo sync`, and `dojo repo checkout` operate only on the repo registry. They are not part of session switching and do not change the active session or artifact namespace.
+
 ## 3. Canonical locations
 
 | Path | Meaning |

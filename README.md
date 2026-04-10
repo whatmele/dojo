@@ -149,6 +149,9 @@ That loop is the product.
 | `dojo session resume <id>` | Make an existing session active again |
 | `dojo session none` | Return the workspace to baseline mode with no active session |
 | `dojo status` | Show the current runtime overview: active session, repos, sessions, and task summary |
+| `dojo repo status` | Show Git status for selected registered repos without touching session state |
+| `dojo repo sync` | Run safe `git pull` across selected repos; add `--init` to clone missing configured repos |
+| `dojo repo checkout <branch>` | Checkout one branch across selected repos; add `--main` to use each repo's configured main branch |
 | `dojo session status` | Show details for one session |
 | `dojo context reload` | Re-render commands and rebuild `.dojo/context.md` without launching a tool |
 | `dojo start` | Refresh runtime state and launch the selected AI tool |
@@ -167,6 +170,13 @@ dojo init
 # Register repositories
 dojo repo add git@github.com:org/backend-service.git
 dojo repo add --local ./existing-repo
+
+# Optional lightweight Git helpers over the registered repos
+dojo repo status
+dojo repo sync
+dojo repo sync --init
+dojo repo checkout feature/auth
+dojo repo checkout --main
 
 # Create or resume a session
 dojo session new

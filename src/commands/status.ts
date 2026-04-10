@@ -192,10 +192,11 @@ function printRepoTable(repos: RepoConfig[]): void {
   }
 
   const rows = [
-    ['Repo', 'Type', 'Path', 'Git'],
+    ['Repo', 'Type', 'Main', 'Path', 'Git'],
     ...repos.map((repo) => [
       repo.name,
       repo.type,
+      repo.main_branch ?? '-',
       repo.path,
       repo.git,
     ]),

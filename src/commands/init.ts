@@ -190,6 +190,14 @@ async function autoCommitWorkspaceConfig(root: string, message: string): Promise
   }
 }
 
+async function promptMainBranch(): Promise<string | undefined> {
+  const mainBranch = await input({
+    message: 'Main branch (optional, used by `dojo repo checkout --main`):',
+  });
+  const value = mainBranch.trim();
+  return value || undefined;
+}
+
 async function promptOptionalRepos(root: string): Promise<void> {
   let addMore = await confirm({ message: 'Add a Git repository now?', default: true });
 
@@ -207,6 +215,7 @@ async function promptOptionalRepos(root: string): Promise<void> {
     });
 
     const repoDesc = await input({ message: 'Repository description:' });
+    const mainBranch = await promptMainBranch();
     const repoPath = `repos/${repoType}/${repoName}`;
     const fullPath = path.join(root, repoPath);
 
@@ -219,6 +228,7 @@ async function promptOptionalRepos(root: string): Promise<void> {
         git: gitUrl,
         path: repoPath,
         description: repoDesc,
+        ...(mainBranch ? { main_branch: mainBranch } : {}),
       };
       addRepo(root, repoConfig);
       await autoCommitWorkspaceConfig(root, `chore: register repository ${repoName}`);

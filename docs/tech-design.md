@@ -84,8 +84,19 @@ Each repo entry contains:
 - `git`
 - `path`
 - `description`
+- optional `main_branch`
 
-`dojo repo add` may clone a remote repo or register a local repo path, but Dojo does not try to align or validate branches.
+`dojo repo add` may clone a remote repo or register a local repo path, but Dojo does not bind repos to sessions.
+
+The lightweight repo helpers are intentionally thin wrappers around Git:
+
+- `dojo repo status` inspects selected registered repos and reports branch, upstream, staged files, changed files, untracked files, and pending push/pull state.
+- `dojo repo sync` runs `git pull` for the selected repos. By default it only syncs the current branch. `--all-branch` fetches all remotes before pulling the current branch.
+- `dojo repo sync --init` clones a configured repo only when its local directory is missing.
+- `dojo repo checkout <branch>` checks out the same branch across selected repos.
+- `dojo repo checkout --main` checks out each selected repo's configured `main_branch`; repos without that config fail with a user-facing hint.
+
+Repo helpers remember the last selected repo names in `.dojo/state.json`. Without selection history, interactive repo operations default to `biz` repos. They never run `stash`, `reset`, force checkout, or recovery actions.
 
 ## 5. Plugin loading model
 

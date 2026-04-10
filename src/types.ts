@@ -8,6 +8,7 @@ export interface RepoConfig {
   git: string;
   path: string;
   description: string;
+  main_branch?: string;
 }
 
 export interface WorkspaceConfig {
@@ -23,6 +24,7 @@ export interface WorkspaceConfig {
 
 export interface WorkspaceState {
   active_session: string | null;
+  last_repo_selection?: string[];
 }
 
 export interface SessionState {

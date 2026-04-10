@@ -1,6 +1,18 @@
 import { spawn } from 'node:child_process';
 import { simpleGit } from 'simple-git';
 
+export interface GitRepoStatus {
+  branch: string;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  staged: number;
+  changed: number;
+  untracked: number;
+  conflicts: number;
+  clean: boolean;
+}
+
 async function listRefs(repoPath: string, refPattern: string): Promise<string[]> {
   const git = simpleGit(repoPath);
   const output = await git.raw(['for-each-ref', '--format=%(refname:short)', refPattern]);
@@ -55,6 +67,26 @@ export async function cloneRepo(gitUrl: string, targetPath: string): Promise<voi
   });
 }
 
+export async function cloneRepoQuiet(gitUrl: string, targetPath: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn('git', ['clone', gitUrl, targetPath], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const chunks: Buffer[] = [];
+    child.stdout?.on('data', (chunk: Buffer) => chunks.push(chunk));
+    child.stderr?.on('data', (chunk: Buffer) => chunks.push(chunk));
+    child.on('error', reject);
+    child.on('close', (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      const detail = Buffer.concat(chunks).toString('utf-8').trim();
+      reject(new Error(detail || `git clone failed (exit ${code ?? signal})`));
+    });
+  });
+}
+
 export async function createBranch(repoPath: string, branchName: string): Promise<void> {
   const git = simpleGit(repoPath);
   await git.checkoutLocalBranch(branchName);
@@ -68,6 +100,11 @@ export async function pushBranch(repoPath: string, branchName: string): Promise<
 export async function fetchRemote(repoPath: string): Promise<void> {
   const git = simpleGit(repoPath);
   await git.fetch();
+}
+
+export async function fetchAllBranches(repoPath: string): Promise<void> {
+  const git = simpleGit(repoPath);
+  await git.fetch(['--all', '--prune']);
 }
 
 export async function checkoutBranch(repoPath: string, branchName: string): Promise<void> {
@@ -96,6 +133,61 @@ export async function pullCurrent(repoPath: string): Promise<{ success: boolean;
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, summary: msg };
   }
+}
+
+async function countRawLines(output: string): Promise<number> {
+  return output.split('\n').map((line) => line.trim()).filter(Boolean).length;
+}
+
+export async function getRepoStatus(repoPath: string): Promise<GitRepoStatus> {
+  const git = simpleGit(repoPath);
+  const branch = await getCurrentBranch(repoPath);
+
+  let upstream: string | null = null;
+  let ahead = 0;
+  let behind = 0;
+
+  try {
+    upstream = (await git.raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'])).trim() || null;
+  } catch {
+    upstream = null;
+  }
+
+  if (upstream) {
+    try {
+      const raw = await git.raw(['rev-list', '--left-right', '--count', 'HEAD...@{u}']);
+      const [aheadRaw, behindRaw] = raw.trim().split(/\s+/);
+      ahead = Number.parseInt(aheadRaw ?? '0', 10) || 0;
+      behind = Number.parseInt(behindRaw ?? '0', 10) || 0;
+    } catch {
+      ahead = 0;
+      behind = 0;
+    }
+  }
+
+  const [stagedRaw, changedRaw, untrackedRaw, conflictsRaw] = await Promise.all([
+    git.raw(['diff', '--cached', '--name-only']),
+    git.raw(['diff', '--name-only']),
+    git.raw(['ls-files', '--others', '--exclude-standard']),
+    git.raw(['diff', '--name-only', '--diff-filter=U']),
+  ]);
+
+  const staged = await countRawLines(stagedRaw);
+  const changed = await countRawLines(changedRaw);
+  const untracked = await countRawLines(untrackedRaw);
+  const conflicts = await countRawLines(conflictsRaw);
+
+  return {
+    branch,
+    upstream,
+    ahead,
+    behind,
+    staged,
+    changed,
+    untracked,
+    conflicts,
+    clean: staged === 0 && changed === 0 && untracked === 0 && conflicts === 0,
+  };
 }
 
 export async function isDirty(repoPath: string): Promise<boolean> {
