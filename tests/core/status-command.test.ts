@@ -76,7 +76,10 @@ afterEach(() => {
 });
 
 describe('status command', () => {
-  it('prints a runtime dashboard with visible commands, skills, and agent surfaces in baseline mode', async () => {
+  it('prints a simplified dashboard by default', async () => {
+    writeFile(path.join(tmpDir, '.dojo', 'commands', 'dojo-unrendered.md'), '---\nscope: workspace\n---\nnot rendered');
+    writeFile(path.join(tmpDir, '.dojo', 'skills', 'dojo-source-only', 'SKILL.md'), '# Source only skill\n');
+
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const program = new Command();
     program.name('dojo');
@@ -84,6 +87,28 @@ describe('status command', () => {
     registerStatusCommand(program);
 
     await program.parseAsync(['node', 'dojo', 'status']);
+
+    const output = logSpy.mock.calls.map((call) => call.map((value) => String(value)).join(' ')).join('\n');
+    expect(output).toContain('DOJO RUNTIME DASHBOARD');
+    expect(output).toContain('OVERVIEW');
+    expect(output).toContain('Commands');
+    expect(output).toContain('Skills');
+    expect(output).toContain('Repositories');
+    expect(output).toContain('dojo-gen-doc');
+    expect(output).toContain('dojo-template-authoring');
+    expect(output).not.toContain('dojo-unrendered');
+    expect(output).not.toContain('dojo-source-only');
+    expect(output).not.toContain('RUNTIME ASSETS');
+  });
+
+  it('prints a full runtime dashboard when --full is provided', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const program = new Command();
+    program.name('dojo');
+    program.command('session');
+    registerStatusCommand(program);
+
+    await program.parseAsync(['node', 'dojo', 'status', '--full']);
 
     const output = logSpy.mock.calls.map((call) => call.map((value) => String(value)).join(' ')).join('\n');
     expect(output).toContain('DOJO RUNTIME DASHBOARD');
@@ -122,7 +147,7 @@ describe('status command', () => {
     program.command('session');
     registerStatusCommand(program);
 
-    await program.parseAsync(['node', 'dojo', 'status']);
+    await program.parseAsync(['node', 'dojo', 'status', '--full']);
 
     const output = logSpy.mock.calls.map((call) => call.map((value) => String(value)).join(' ')).join('\n');
     expect(output).toContain('WORK PULSE');
