@@ -92,7 +92,7 @@ The lightweight repo helpers are intentionally thin wrappers around Git:
 
 - `dojo repo status` inspects selected registered repos and reports branch, upstream, staged files, changed files, untracked files, and pending push/pull state.
 - `dojo repo sync` runs `git pull` for the selected repos. By default it only syncs the current branch. `--all-branch` fetches all remotes before pulling the current branch.
-- `dojo repo sync --init` clones a configured repo only when its local directory is missing.
+- `dojo repo sync --init` clones a configured repo only when its local directory is missing. If `main_branch` is configured, the newly cloned repo is aligned to that branch before pulling.
 - `dojo repo checkout <branch>` checks out the same branch across selected repos.
 - `dojo repo checkout --main` checks out each selected repo's configured `main_branch`; repos without that config fail with a user-facing hint.
 

@@ -1,23 +1,43 @@
 {
-  "name": "dojo-cli",
+  "name": "@whatmele/dojo",
   "version": "0.1.0",
   "description": "Agent workspace CLI for managing multi-repo workspaces, dev session lifecycle, and AI agent context",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/whatmele/dojo.git"
+  },
+  "homepage": "https://github.com/whatmele/dojo#readme",
+  "bugs": {
+    "url": "https://github.com/whatmele/dojo/issues"
+  },
   "bin": {
     "dojo": "./dist/bin/dojo.js"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "docs/assets/dojo-banner.svg"
+  ],
   "scripts": {
-    "build": "tsc && rm -rf dist/src/templates dist/src/starter dist/src/builtins dist/src/skills && cp -r src/starter dist/src/starter && cp -r src/builtins dist/src/builtins && cp -r src/skills dist/src/skills",
+    "build": "rm -rf dist && tsc && cp -r src/starter dist/src/starter && cp -r src/builtins dist/src/builtins && cp -r src/skills dist/src/skills",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit",
+    "pack:preview": "npm_config_cache=/tmp/dojo-npm-cache npm pack --dry-run",
+    "release:npm": "bash scripts/release-npm.sh",
     "smoke:tty": "npm run smoke:tty:main && npm run smoke:tty:multi && npm run smoke:tty:failures",
     "smoke:tty:main": "bash scripts/tty-smoke.sh",
     "smoke:tty:multi": "bash scripts/tty-smoke-multi.sh",
     "smoke:tty:failures": "bash scripts/tty-smoke-failures.sh",
     "smoke:interactive": "bash scripts/interactive-smoke.sh",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "prepublishOnly": "npm test && npm run build"
   },
   "keywords": [
     "ai",
@@ -28,7 +48,7 @@
   ],
   "license": "MIT",
   "engines": {
-    "node": ">=18"
+    "node": ">=20.19.2"
   },
   "dependencies": {
     "@inquirer/prompts": "^8.3.2",

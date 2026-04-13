@@ -289,4 +289,37 @@ describe('repo git helpers', () => {
     expect(fs.existsSync(path.join(missingPath, '.git'))).toBe(true);
     expect(logSpy.mock.calls.flat().join('\n')).toContain('cloned + synced');
   });
+
+  it('sync --init aligns a newly cloned repository to its configured main branch before pulling', async () => {
+    const localGit = simpleGit(localRepoRoot);
+    await localGit.checkout('develop');
+    fs.writeFileSync(path.join(localRepoRoot, 'develop.txt'), 'develop branch\n');
+    await localGit.add('.');
+    await localGit.commit('develop commit');
+    await localGit.checkout('main');
+
+    const missingPath = path.join(workspaceRoot, 'repos', 'biz', 'missing-main-repo');
+    writeConfig(workspaceRoot, {
+      workspace: { name: 'repo-test', description: 'repo helper test' },
+      agents: ['codex'],
+      repos: [{
+        name: 'missing-main-repo',
+        type: 'biz',
+        git: localRepoRoot,
+        path: 'repos/biz/missing-main-repo',
+        description: 'Missing repository',
+        main_branch: 'develop',
+      }],
+    } satisfies WorkspaceConfig);
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const program = new Command();
+    registerRepoCommand(program);
+
+    await program.parseAsync(['node', 'dojo', 'repo', 'sync', '--init', '--repo', 'missing-main-repo']);
+
+    expect(fs.existsSync(path.join(missingPath, '.git'))).toBe(true);
+    expect(await simpleGit(missingPath).revparse(['--abbrev-ref', 'HEAD'])).toBe('develop');
+    expect(logSpy.mock.calls.flat().join('\n')).toContain('aligned to develop');
+  });
 });

@@ -7,6 +7,7 @@ import type { RepoType, RepoConfig } from '../types.js';
 import { findWorkspaceRoot, resolveRepoPath } from '../core/workspace.js';
 import { readConfig, addRepo, removeRepo } from '../core/config.js';
 import {
+  alignRepoToExistingBranch,
   checkoutBranch,
   cloneRepo,
   cloneRepoQuiet,
@@ -191,6 +192,66 @@ async function ensureRepoDirectoryForSync(root: string, repo: RepoConfig, initMi
   }
 }
 
+async function syncOneRepository(
+  root: string,
+  repo: RepoConfig,
+  options: { allBranch?: boolean; init?: boolean },
+): Promise<{ row: string[]; failed: boolean }> {
+  const ensured = await ensureRepoDirectoryForSync(root, repo, Boolean(options.init));
+  if (!ensured.ok) {
+    return {
+      row: [repo.name, repo.type, '-', ensured.state, ensured.detail],
+      failed: true,
+    };
+  }
+
+  try {
+    if (options.allBranch) {
+      await fetchAllBranches(ensured.path);
+    }
+
+    let alignedToMain = false;
+    if (ensured.initialized && repo.main_branch?.trim()) {
+      await alignRepoToExistingBranch(ensured.path, repo.main_branch.trim());
+      alignedToMain = true;
+    }
+
+    const statusBeforePull = await getRepoStatus(ensured.path);
+    const pulled = await pullCurrent(ensured.path);
+    if (!pulled.success) {
+      return {
+        row: [repo.name, repo.type, statusBeforePull.branch, 'failed', oneLine(pulled.summary)],
+        failed: true,
+      };
+    }
+
+    const details: string[] = [pulled.summary];
+    if (alignedToMain) {
+      details.push(`aligned to ${repo.main_branch}`);
+    }
+    if (options.allBranch) {
+      details.push('fetched all remotes');
+    }
+
+    return {
+      row: [
+        repo.name,
+        repo.type,
+        statusBeforePull.branch,
+        ensured.initialized ? 'cloned + synced' : 'synced',
+        details.join('; '),
+      ],
+      failed: false,
+    };
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      row: [repo.name, repo.type, '-', 'failed', oneLine(detail)],
+      failed: true,
+    };
+  }
+}
+
 function summarizeRepoState(status: Awaited<ReturnType<typeof getRepoStatus>>): string {
   if (status.conflicts > 0) return 'error';
   if (status.ahead > 0 && status.behind > 0) return 'diverged';
@@ -246,40 +307,9 @@ async function syncRepositories(root: string, options: RepoSelectionOptions & { 
   const repos = await selectRepositories(root, options);
   if (repos.length === 0) return;
 
-  const rows: string[][] = [];
-  let failed = false;
-  for (const repo of repos) {
-    const ensured = await ensureRepoDirectoryForSync(root, repo, Boolean(options.init));
-    if (!ensured.ok) {
-      failed = true;
-      rows.push([repo.name, repo.type, '-', ensured.state, ensured.detail]);
-      continue;
-    }
-
-    try {
-      if (options.allBranch) {
-        await fetchAllBranches(ensured.path);
-      }
-      const statusBeforePull = await getRepoStatus(ensured.path);
-      const pulled = await pullCurrent(ensured.path);
-      if (!pulled.success) {
-        failed = true;
-        rows.push([repo.name, repo.type, statusBeforePull.branch, 'failed', oneLine(pulled.summary)]);
-        continue;
-      }
-      rows.push([
-        repo.name,
-        repo.type,
-        statusBeforePull.branch,
-        ensured.initialized ? 'cloned + synced' : 'synced',
-        options.allBranch ? `${pulled.summary}; fetched all remotes` : pulled.summary,
-      ]);
-    } catch (error: unknown) {
-      failed = true;
-      const detail = error instanceof Error ? error.message : String(error);
-      rows.push([repo.name, repo.type, '-', 'failed', oneLine(detail)]);
-    }
-  }
+  const results = await Promise.all(repos.map((repo) => syncOneRepository(root, repo, options)));
+  const rows = results.map((result) => result.row);
+  const failed = results.some((result) => result.failed);
 
   log.info(`Repository sync (${repos.length} selected)`);
   printTable(['Repo', 'Type', 'Branch', 'State', 'Detail'], rows, 3);

@@ -16,6 +16,10 @@
   <code>context</code>
 </p>
 
+<p align="center">
+  <code>npm i -g @whatmele/dojo</code>
+</p>
+
 ## Why Dojo Exists
 
 Most AI coding setups break down at the workspace boundary.
@@ -150,7 +154,7 @@ That loop is the product.
 | `dojo session none` | Return the workspace to baseline mode with no active session |
 | `dojo status` | Show the current runtime overview: active session, repos, sessions, and task summary |
 | `dojo repo status` | Show Git status for selected registered repos without touching session state |
-| `dojo repo sync` | Run safe `git pull` across selected repos; add `--init` to clone missing configured repos |
+| `dojo repo sync` | Run safe `git pull` across selected repos; add `--init` to clone missing configured repos and align them to configured `main_branch` |
 | `dojo repo checkout <branch>` | Checkout one branch across selected repos; add `--main` to use each repo's configured main branch |
 | `dojo session status` | Show details for one session |
 | `dojo context reload` | Re-render commands and rebuild `.dojo/context.md` without launching a tool |
@@ -160,11 +164,10 @@ That loop is the product.
 ## Quick Start
 
 ```bash
-# Install dependencies for this repo
-npm install
-npm run build
+# Install Dojo
+npm install -g @whatmele/dojo
 
-# Initialize a workspace in the current directory
+# Initialize a workspace
 dojo init
 
 # Register repositories
@@ -198,6 +201,35 @@ dojo artifact create dev-plan --description "Development plan docs." --scope ses
 dojo start
 ```
 
+## Install
+
+```bash
+npm install -g @whatmele/dojo
+dojo --version
+```
+
+Or use the helper script in this repo:
+
+```bash
+bash scripts/install-dojo.sh
+```
+
+## Release
+
+To publish the package manually from this repo:
+
+```bash
+bash scripts/release-npm.sh
+```
+
+To bump the version and publish in one go:
+
+```bash
+bash scripts/release-npm.sh 0.1.1
+```
+
+The release script checks for a clean git tree, verifies npm login, runs tests/build/pack preview, and then publishes.
+
 ## What `dojo start` Guarantees
 
 `dojo start` is the normal entry point for day-to-day use.
@@ -217,6 +249,17 @@ Important behavior:
 - the runtime state is always refreshed right before launch
 
 That keeps Dojo lightweight and predictable.
+
+## Repo Helpers
+
+Dojo's repo helpers are intentionally thin wrappers over Git:
+
+- `dojo repo status` inspects selected registered repos
+- `dojo repo sync` pulls the current branch only
+- `dojo repo sync --init` clones missing repos and, if `main_branch` is configured, aligns the newly cloned repo to that branch before pulling
+- `dojo repo checkout --main` checks out the configured `main_branch` for each selected repo
+
+These helpers do not touch session state and do not run stash/reset/force actions on your behalf.
 
 ## Built-in Starter Commands
 

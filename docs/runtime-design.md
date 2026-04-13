@@ -90,7 +90,7 @@ Its job is to:
 - point the AI to the right artifact directories
 - include artifact-rendered context blocks in deterministic order
 
-Repository Git helpers such as `dojo repo status`, `dojo repo sync`, and `dojo repo checkout` operate only on the repo registry. They are not part of session switching and do not change the active session or artifact namespace.
+Repository Git helpers such as `dojo repo status`, `dojo repo sync`, and `dojo repo checkout` operate only on the repo registry. They are not part of session switching and do not change the active session or artifact namespace. `dojo repo sync --init` may clone a missing configured repo and align it to its configured `main_branch`, but it still remains independent from session state.
 
 ## 3. Canonical locations
 
