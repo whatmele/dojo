@@ -29,6 +29,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit",
+    "desktop:dev": "concurrently -k \"vite --config desktop/vite.config.ts --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && DOJO_DESKTOP_DEV_SERVER=http://127.0.0.1:5173 electron desktop/electron/main.cjs\"",
+    "desktop:dev:debug": "concurrently -k \"vite --config desktop/vite.config.ts --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && DOJO_DESKTOP_DEV_SERVER=http://127.0.0.1:5173 electron --remote-debugging-port=9333 desktop/electron/main.cjs\"",
+    "desktop:build": "vite build --config desktop/vite.config.ts",
+    "desktop:start": "electron desktop/electron/main.cjs",
+    "desktop:start:debug": "electron --remote-debugging-port=9333 desktop/electron/main.cjs",
     "pack:preview": "npm_config_cache=/tmp/dojo-npm-cache npm pack --dry-run",
     "release:npm": "bash scripts/release-npm.sh",
     "smoke:tty": "npm run smoke:tty:main && npm run smoke:tty:multi && npm run smoke:tty:failures",
@@ -52,13 +57,34 @@
   },
   "dependencies": {
     "@inquirer/prompts": "^8.3.2",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "@xyflow/react": "^12.11.0",
     "chalk": "^5.6.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "commander": "^14.0.3",
+    "lucide-react": "^1.17.0",
+    "node-pty": "^1.1.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "simple-git": "^3.33.0",
+    "tailwind-merge": "^3.6.0",
     "typescript": "^6.0.2"
   },
   "devDependencies": {
     "@types/node": "^18.19.130",
-    "vitest": "^2.1.9"
+    "@types/react": "^19.2.16",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.5.0",
+    "concurrently": "^9.2.1",
+    "electron": "^31.7.0",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^3.4.19",
+    "vite": "^5.4.21",
+    "vitest": "^2.1.9",
+    "wait-on": "^9.0.10"
   }
 }

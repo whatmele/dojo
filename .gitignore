@@ -1,5 +1,6 @@
 node_modules/
 dist/
+desktop/dist/
 *.tsbuildinfo
 .DS_Store
 dojo-test-workspace/
